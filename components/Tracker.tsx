@@ -7,6 +7,82 @@ import { readFilesAsJd, viewJdFile } from '@/lib/files';
 import { statusBadgeClass, taraBadgeClass, fmtDate, fileIcon, fileSize } from '@/lib/format';
 import type { ConfirmOptions } from './ConfirmDialog';
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+// Stable color per person — each name always maps to the same swatch.
+const AVATAR_PALETTE = [
+  { bg: '#EDE9FE', fg: '#6D28D9' }, // purple
+  { bg: '#DBEAFE', fg: '#1D4ED8' }, // blue
+  { bg: '#D1FAE5', fg: '#047857' }, // green
+  { bg: '#FCE7F3', fg: '#BE185D' }, // pink
+  { bg: '#FEF3C7', fg: '#92400E' }, // amber
+  { bg: '#CCFBF1', fg: '#0F766E' }, // teal
+  { bg: '#E0E7FF', fg: '#3730A3' }, // indigo
+];
+
+function avatarColor(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length];
+}
+
+function statusRowColor(status: string): string {
+  if (!status) return 'transparent';
+  const l = status.toLowerCase();
+  if (l.includes('not won') || l.includes('lost') || l.includes('not going')) return 'var(--danger)';
+  if (l.trim() === 'closed') return 'var(--success)';
+  if (l.includes('ongoing')) return 'var(--accent)';
+  if (l.includes('going well')) return '#15803d';
+  if (l.includes('hold')) return 'var(--warn)';
+  if (l.includes('contract')) return 'var(--accent-2)';
+  return 'transparent';
+}
+
+function PencilIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
+
 interface Props {
   records: PresalesRecord[];
   reload: () => Promise<void>;
@@ -141,11 +217,11 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
       />
 
       <div className="stats">
-        <Stat label="Total" value={total} />
+        <Stat label="Total" value={total} color="#475569" />
         <Stat label="Active" value={active} color="var(--accent)" />
         <Stat label="Closed Won" value={won} color="var(--success)" />
         <Stat label="TARA Set" value={taraSet} color="var(--purple)" />
-        <Stat label="Assessments" value={assessCount} />
+        <Stat label="Assessments" value={assessCount} color="#0f766e" />
       </div>
 
       <div className="filters">
@@ -185,13 +261,13 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
           <thead>
             <tr>
               <th style={{ width: 100 }}>Date</th>
-              <th style={{ width: 115 }}>Requested By</th>
-              <th style={{ width: 125 }}>Customer</th>
-              <th style={{ width: 105 }}>Status</th>
-              <th style={{ width: 170 }}>Assessments</th>
-              <th style={{ width: 65 }}>TARA</th>
-              <th style={{ width: 90 }}>JD Files</th>
-              <th style={{ width: 75 }}>Actions</th>
+              <th style={{ width: 200 }}>Requested By</th>
+              <th style={{ width: 170 }}>Customer</th>
+              <th style={{ width: 150 }}>Status</th>
+              <th style={{ width: 230 }}>Assessments</th>
+              <th style={{ width: 100 }}>TARA</th>
+              <th style={{ width: 120 }}>JD Files</th>
+              <th style={{ width: 100 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -212,40 +288,63 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
               const hasMore = r.assessments.length > 1 || !!first.qb;
               return (
                 <Fragment key={r.id}>
-                  <tr>
-                    <td>{fmtDate(r.date)}</td>
-                    <td style={{ fontWeight: 500 }} title={r.person}>
-                      {r.person || '—'}
+                  <tr
+                    style={
+                      { '--row-color': statusRowColor(r.status) } as React.CSSProperties
+                    }
+                  >
+                    <td style={{ color: 'var(--muted)' }}>{fmtDate(r.date)}</td>
+                    <td title={r.person}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span
+                          className="avatar"
+                          style={{
+                            background: avatarColor(r.person || '?').bg,
+                            color: avatarColor(r.person || '?').fg,
+                          }}
+                        >
+                          {getInitials(r.person || '?')}
+                        </span>
+                        <span style={{ fontWeight: 500 }}>{r.person || '—'}</span>
+                      </div>
                     </td>
-                    <td title={r.customer}>{r.customer || '—'}</td>
-                    <td>
-                      <span className={'badge ' + statusBadgeClass(r.status)}>
-                        {r.status || '—'}
+                    <td title={r.customer}>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>
+                        {r.customer || '—'}
                       </span>
                     </td>
                     <td>
-                      <span title={first.name}>{label}</span>
-                      {hasMore && (
-                        <button
-                          onClick={() => toggleExpand(r.id)}
-                          style={{
-                            fontSize: 10.5,
-                            color: 'var(--accent)',
-                            background: 'var(--al)',
-                            border: 'none',
-                            borderRadius: 4,
-                            padding: '2px 6px',
-                            cursor: 'pointer',
-                            marginLeft: 4,
-                          }}
-                        >
-                          {isExp ? '▲' : '▼'}{' '}
-                          {r.assessments.length > 1 ? '+' + (r.assessments.length - 1) : 'QB'}
-                        </button>
+                      {r.status ? (
+                        <span className={'badge ' + statusBadgeClass(r.status)}>{r.status}</span>
+                      ) : (
+                        <span style={{ color: 'var(--subtle)' }}>—</span>
                       )}
                     </td>
                     <td>
-                      <span className={'badge ' + taraBadgeClass(r.tara)}>{r.tara || '—'}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span title={first.name} style={{ fontWeight: 500 }}>
+                          {label}
+                        </span>
+                        {hasMore && (
+                          <button
+                            className="row-expand"
+                            onClick={() => toggleExpand(r.id)}
+                          >
+                            {isExp
+                              ? '− Hide details'
+                              : r.assessments.length > 1
+                                ? `+ ${r.assessments.length - 1} more`
+                                : '+ View QB topics'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      {r.tara ? (
+                        <span className={'badge ' + taraBadgeClass(r.tara)}>{r.tara}</span>
+                      ) : (
+                        <span style={{ color: 'var(--subtle)' }}>—</span>
+                      )}
                     </td>
                     <td>
                       {r.jd_files.length ? (
@@ -263,12 +362,22 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
                       )}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                        <button className="edit-btn" title="Edit" onClick={() => onEdit(r)}>
-                          ✏️
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <button
+                          className="edit-btn"
+                          title="Edit"
+                          onClick={() => onEdit(r)}
+                          aria-label="Edit"
+                        >
+                          <PencilIcon />
                         </button>
-                        <button className="del-btn" title="Delete" onClick={() => del(r)}>
-                          🗑️
+                        <button
+                          className="del-btn"
+                          title="Delete"
+                          onClick={() => del(r)}
+                          aria-label="Delete"
+                        >
+                          <TrashIcon />
                         </button>
                       </div>
                     </td>
@@ -280,7 +389,7 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
                         colSpan={8}
                         style={{
                           padding: '10px 16px 12px 22px',
-                          background: '#f7f8ff',
+                          background: 'var(--surface2)',
                         }}
                       >
                         {first.qb && (
@@ -332,7 +441,7 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
 
                   {expandedJd === r.id && (
                     <tr>
-                      <td colSpan={8} style={{ padding: '12px 14px', background: '#f0f4ff' }}>
+                      <td colSpan={8} style={{ padding: '12px 14px', background: 'var(--accent-soft)' }}>
                         <div
                           style={{
                             display: 'flex',
@@ -416,7 +525,10 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
 
 function Stat({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
-    <div className="sc">
+    <div
+      className="sc"
+      style={color ? ({ '--sc-accent': color } as React.CSSProperties) : undefined}
+    >
       <div className="sc-label">{label}</div>
       <div className="sc-val" style={color ? { color } : undefined}>
         {value}

@@ -58,6 +58,46 @@ export async function logout(): Promise<void> {
   await fetch('/api/logout', { method: 'POST' });
 }
 
+export type HubspotDeal = {
+  id: string;
+  properties: {
+    dealname?: string;
+    amount?: string;
+    dealstage?: string;
+    pipeline?: string;
+    closedate?: string;
+    createdate?: string;
+    hs_lastmodifieddate?: string;
+    hubspot_owner_id?: string;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type HubspotDealsResponse = {
+  deals: HubspotDeal[];
+  paging: { next?: { after: string } } | null;
+  total: number | null;
+  portalId: string | null;
+};
+
+export async function fetchHubspotDeals(
+  opts: { q?: string; after?: string; limit?: number } = {},
+): Promise<HubspotDealsResponse> {
+  const res = await fetch('/api/hubspot/deals', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  const data = await jsonOrThrow(res);
+  return {
+    deals: data.deals ?? [],
+    paging: data.paging ?? null,
+    total: data.total ?? null,
+    portalId: data.portalId ?? null,
+  };
+}
+
 /** Strips server-managed fields, leaving a RecordInput suitable for create/update. */
 export function toInput(r: PresalesRecord | RecordInput): RecordInput {
   return {

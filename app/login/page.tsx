@@ -33,36 +33,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-        background: 'var(--bg)',
-      }}
-    >
-      <form
-        onSubmit={submit}
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: '12px',
-          padding: '32px',
-          width: '100%',
-          maxWidth: '360px',
-          boxShadow: '0 8px 32px rgba(0,0,0,.08)',
-        }}
-      >
-        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-          <div style={{ fontSize: '32px', marginBottom: '8px' }}>🔒</div>
-          <div style={{ fontSize: '18px', fontWeight: 700 }}>
-            Presales <span style={{ color: 'var(--accent)' }}>Tracker</span>
-          </div>
-          <div style={{ fontSize: '12.5px', color: 'var(--muted)', marginTop: '4px' }}>
-            Enter the shared password to continue.
-          </div>
+    <div className="login-bg">
+      <form onSubmit={submit} className="login-card">
+        <div className="login-head">
+          <div className="login-mark">🔒</div>
+          <h1 className="login-title">
+            Presales <span>Tracker</span>
+          </h1>
+          <p className="login-sub">Enter the shared password to continue</p>
         </div>
 
         <label className="fl">Password</label>
@@ -75,28 +53,9 @@ export default function LoginPage() {
           placeholder="••••••••••••"
         />
 
-        {error && (
-          <div
-            style={{
-              marginTop: '10px',
-              fontSize: '12px',
-              color: 'var(--danger)',
-              background: 'var(--dl)',
-              border: '1px solid #f5c6c2',
-              borderRadius: '7px',
-              padding: '7px 10px',
-            }}
-          >
-            {error}
-          </div>
-        )}
+        {error && <div className="login-error">{error}</div>}
 
-        <button
-          className="btn btn-p"
-          type="submit"
-          disabled={loading || !password}
-          style={{ width: '100%', marginTop: '16px', justifyContent: 'center' }}
-        >
+        <button className="btn btn-p login-cta" type="submit" disabled={loading || !password}>
           {loading ? 'Checking…' : 'Unlock'}
         </button>
       </form>

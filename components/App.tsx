@@ -10,17 +10,19 @@ import ImportTab from './ImportTab';
 import BulkJD from './BulkJD';
 import SalesForm from './SalesForm';
 import Dashboard from './Dashboard';
+import HubspotTab from './HubspotTab';
 import RecordModal from './RecordModal';
 import ConfirmDialog, { type ConfirmOptions } from './ConfirmDialog';
 
-type Tab = 'tracker' | 'import' | 'bulkjd' | 'salesform' | 'dashboard';
+type Tab = 'tracker' | 'import' | 'bulkjd' | 'salesform' | 'dashboard' | 'hubspot';
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'tracker', label: '📋 All Requests' },
-  { id: 'import', label: '⬆️ Import Excel' },
-  { id: 'bulkjd', label: '📎 Bulk JD Upload' },
-  { id: 'salesform', label: '📝 Sales Form' },
-  { id: 'dashboard', label: '📊 Dashboard' },
+  { id: 'tracker', label: 'All Requests' },
+  { id: 'import', label: 'Import Excel' },
+  { id: 'bulkjd', label: 'Bulk JD Upload' },
+  { id: 'salesform', label: 'Sales Form' },
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'hubspot', label: 'HubSpot' },
 ];
 
 export default function App() {
@@ -113,7 +115,16 @@ export default function App() {
     <div className="app">
       <header className="hdr">
         <div className="logo">
-          Presales <span>Tracker</span>
+          <img
+            src="/imocha-logo.jpeg"
+            alt="iMocha"
+            className="logo-img"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = 'none';
+            }}
+          />
+          <span className="logo-divider" aria-hidden="true">/</span>
+          <span className="logo-product">Presales Tracker</span>
         </div>
         <div className="hdr-right">
           <button className="btn btn-p" onClick={() => openModal(null)}>
@@ -203,6 +214,7 @@ export default function App() {
               />
             )}
             {tab === 'dashboard' && <Dashboard records={records} />}
+            {tab === 'hubspot' && <HubspotTab />}
           </>
         )}
       </main>
