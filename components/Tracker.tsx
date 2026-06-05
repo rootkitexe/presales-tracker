@@ -1,6 +1,8 @@
 'use client';
 
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
+
+const PAGE_SIZE = 25;
 import type { PresalesRecord } from '@/lib/types';
 import { deleteRecord, updateRecord, toInput } from '@/lib/api';
 import { readFilesAsJd, viewJdFile } from '@/lib/files';
@@ -96,6 +98,7 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
   const [fPerson, setFPerson] = useState('');
   const [fStatus, setFStatus] = useState('');
   const [fTara, setFTara] = useState('');
+  const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [expandedJd, setExpandedJd] = useState<string | null>(null);
   const [jdBusy, setJdBusy] = useState(false);
@@ -127,6 +130,17 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
   });
 
   const total = records.length;
+
+  // Reset to first page whenever filters/search change so the user always
+  // lands on the start of the new result set instead of an empty later page.
+  useEffect(() => {
+    setPage(1);
+  }, [search, fPerson, fStatus, fTara]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const pageItems = filtered.slice(pageStart, pageStart + PAGE_SIZE);
   const active = records.filter((r) => /ongoing|going well|contracting/i.test(r.status)).length;
   const won = records.filter((r) => /^closed$/i.test(r.status.trim())).length;
   const taraSet = records.filter((r) => r.tara).length;
@@ -278,7 +292,7 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
                 </td>
               </tr>
             )}
-            {filtered.map((r) => {
+            {pageItems.map((r) => {
               const isExp = expanded.has(r.id);
               const first = r.assessments[0] ?? { name: '—', qb: '' };
               const label =
@@ -514,10 +528,35 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
           </tbody>
         </table>
       </div>
-      <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--muted)' }}>
-        {filtered.length
-          ? `Showing ${filtered.length} of ${total} request${total === 1 ? '' : 's'}`
-          : ''}
+      <div className="pager">
+        <div className="pager-info">
+          {filtered.length
+            ? `Showing ${pageStart + 1}–${Math.min(pageStart + PAGE_SIZE, filtered.length)} of ${filtered.length}${
+                filtered.length !== total ? ` (filtered from ${total})` : ''
+              }`
+            : ''}
+        </div>
+        {totalPages > 1 && (
+          <div className="pager-controls">
+            <button
+              className="btn"
+              disabled={safePage === 1}
+              onClick={() => setPage(safePage - 1)}
+            >
+              ← Prev
+            </button>
+            <span className="pager-page">
+              Page {safePage} of {totalPages}
+            </span>
+            <button
+              className="btn"
+              disabled={safePage === totalPages}
+              onClick={() => setPage(safePage + 1)}
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
