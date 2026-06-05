@@ -24,6 +24,11 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Protect everything except the login page, the login API, and static assets.
-  matcher: ['/((?!login|api/login|_next/static|_next/image|favicon.ico).*)'],
+  // Protect everything except the login page, the login API, Next's static
+  // bundles, and public static assets (any file ending in a known image / font
+  // / icon extension). The image exclusion is required so the login page's
+  // <img src="/imocha-logo.jpeg"> can load before the user authenticates.
+  matcher: [
+    '/((?!login|api/login|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|svg|webp|ico|woff2?)$).*)',
+  ],
 };
