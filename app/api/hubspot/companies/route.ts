@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
 import { isAuthenticated } from '@/lib/auth';
-import { getOwnerMap, getStageMap } from '@/lib/hubspot';
+import { getOwnerMap } from '@/lib/hubspot';
 
 const PROPERTIES = [
-  'dealname',
-  'amount',
-  'dealstage',
-  'pipeline',
-  'closedate',
-  'createdate',
-  'hs_lastmodifieddate',
+  'name',
+  'domain',
+  'website',
+  'industry',
+  'lifecyclestage',
   'hubspot_owner_id',
+  'city',
+  'country',
+  'numberofemployees',
 ];
 
 type SearchBody = {
@@ -21,7 +22,7 @@ type SearchBody = {
   filterGroups?: { filters: { propertyName: string; operator: string; value: string }[] }[];
 };
 
-type HubspotDealRaw = {
+type HubspotCompanyRaw = {
   id: string;
   properties: Record<string, string | null | undefined>;
 };
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    // empty body is fine — fall through to defaults
+    // empty body is fine
   }
 
   const q = (body.q ?? '').trim();
@@ -50,18 +51,18 @@ export async function POST(request: Request) {
 
   const searchBody: SearchBody = {
     properties: PROPERTIES,
-    sorts: [{ propertyName: 'hs_lastmodifieddate', direction: 'DESCENDING' }],
+    sorts: [{ propertyName: q ? 'name' : 'hs_lastmodifieddate', direction: q ? 'ASCENDING' : 'DESCENDING' }],
     limit,
   };
   if (body.after) searchBody.after = body.after;
   if (q) {
     searchBody.filterGroups = [
-      { filters: [{ propertyName: 'dealname', operator: 'CONTAINS_TOKEN', value: q }] },
+      { filters: [{ propertyName: 'name', operator: 'CONTAINS_TOKEN', value: q }] },
     ];
   }
 
   try {
-    const res = await fetch('https://api.hubapi.com/crm/v3/objects/deals/search', {
+    const res = await fetch('https://api.hubapi.com/crm/v3/objects/companies/search', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -77,34 +78,25 @@ export async function POST(request: Request) {
       );
     }
 
-    // Best-effort enrichment — if either lookup fails the raw IDs still ship.
     let ownerMap = new Map<string, string>();
-    let stageMap = new Map<string, { stageLabel: string; pipelineLabel: string }>();
     try {
-      [ownerMap, stageMap] = await Promise.all([
-        getOwnerMap(token),
-        getStageMap(token),
-      ]);
+      ownerMap = await getOwnerMap(token);
     } catch {
-      // ignore — fall through with empty maps
+      // ignore
     }
 
-    const deals = ((data.results ?? []) as HubspotDealRaw[]).map((d) => {
-      const ownerId = d.properties.hubspot_owner_id;
-      const stageId = d.properties.dealstage;
-      const stage = stageId ? stageMap.get(String(stageId)) : undefined;
+    const companies = ((data.results ?? []) as HubspotCompanyRaw[]).map((c) => {
+      const ownerId = c.properties.hubspot_owner_id;
       return {
-        ...d,
+        ...c,
         resolved: {
           ownerName: ownerId ? ownerMap.get(String(ownerId)) ?? null : null,
-          stageLabel: stage?.stageLabel ?? null,
-          pipelineLabel: stage?.pipelineLabel ?? null,
         },
       };
     });
 
     return NextResponse.json({
-      deals,
+      companies,
       paging: data.paging ?? null,
       total: typeof data.total === 'number' ? data.total : null,
       portalId: process.env.HUBSPOT_PORTAL_ID ?? null,

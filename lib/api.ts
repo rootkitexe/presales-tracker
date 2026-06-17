@@ -58,6 +58,12 @@ export async function logout(): Promise<void> {
   await fetch('/api/logout', { method: 'POST' });
 }
 
+type HubspotResolvedDeal = {
+  ownerName: string | null;
+  stageLabel: string | null;
+  pipelineLabel: string | null;
+};
+
 export type HubspotDeal = {
   id: string;
   properties: {
@@ -72,6 +78,7 @@ export type HubspotDeal = {
   };
   createdAt?: string;
   updatedAt?: string;
+  resolved?: HubspotResolvedDeal;
 };
 
 export type HubspotDealsResponse = {
@@ -92,6 +99,46 @@ export async function fetchHubspotDeals(
   const data = await jsonOrThrow(res);
   return {
     deals: data.deals ?? [],
+    paging: data.paging ?? null,
+    total: data.total ?? null,
+    portalId: data.portalId ?? null,
+  };
+}
+
+export type HubspotCompany = {
+  id: string;
+  properties: {
+    name?: string;
+    domain?: string;
+    website?: string;
+    industry?: string;
+    lifecyclestage?: string;
+    hubspot_owner_id?: string;
+    city?: string;
+    country?: string;
+    numberofemployees?: string;
+  };
+  resolved?: { ownerName: string | null };
+};
+
+export type HubspotCompaniesResponse = {
+  companies: HubspotCompany[];
+  paging: { next?: { after: string } } | null;
+  total: number | null;
+  portalId: string | null;
+};
+
+export async function fetchHubspotCompanies(
+  opts: { q?: string; after?: string; limit?: number } = {},
+): Promise<HubspotCompaniesResponse> {
+  const res = await fetch('/api/hubspot/companies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  const data = await jsonOrThrow(res);
+  return {
+    companies: data.companies ?? [],
     paging: data.paging ?? null,
     total: data.total ?? null,
     portalId: data.portalId ?? null,

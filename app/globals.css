@@ -323,6 +323,35 @@ select:focus { border-color: var(--accent); box-shadow: var(--shadow-glow); }
 }
 table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1200px; }
 
+/* HubSpot tab — sub-tab toggle (Deals / Companies) */
+.hs-subtabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 18px;
+}
+.hs-subtab {
+  background: transparent;
+  border: none;
+  padding: 6px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 7px;
+  font-family: inherit;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.hs-subtab:hover { color: var(--text); }
+.hs-subtab.active {
+  background: #fff;
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
 /* Pagination strip under the records table */
 .pager {
   display: flex;
