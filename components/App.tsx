@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import type { PresalesRecord } from '@/lib/types';
 import { fetchRecords, logout } from '@/lib/api';
 import Tracker from './Tracker';
+import TrackerV2 from './TrackerV2';
 import ImportTab from './ImportTab';
 import BulkJD from './BulkJD';
 import SalesForm from './SalesForm';
@@ -14,13 +15,14 @@ import HubspotTab from './HubspotTab';
 import RecordModal from './RecordModal';
 import ConfirmDialog, { type ConfirmOptions } from './ConfirmDialog';
 
-type Tab = 'tracker' | 'import' | 'bulkjd' | 'salesform' | 'dashboard' | 'hubspot';
+type Tab = 'tracker' | 'tracker-v2' | 'import' | 'bulkjd' | 'salesform' | 'dashboard' | 'hubspot';
 
-const TABS: { id: Tab; label: string }[] = [
+const TABS: { id: Tab; label: string; hideInNav?: boolean }[] = [
   { id: 'tracker', label: 'All Requests' },
-  { id: 'import', label: 'Import Excel' },
-  { id: 'bulkjd', label: 'Bulk JD Upload' },
-  { id: 'salesform', label: 'Sales Form' },
+  { id: 'tracker-v2', label: 'All Requests v2' },
+  { id: 'import', label: 'Import Excel', hideInNav: true },
+  { id: 'bulkjd', label: 'Bulk JD Upload', hideInNav: true },
+  { id: 'salesform', label: 'Sales Form', hideInNav: true },
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'hubspot', label: 'HubSpot' },
 ];
@@ -143,7 +145,7 @@ export default function App() {
       </header>
 
       <nav className="tabs">
-        {TABS.map((t) => (
+        {TABS.filter((t) => !t.hideInNav).map((t) => (
           <button
             key={t.id}
             className={'tab' + (tab === t.id ? ' active' : '')}
@@ -187,6 +189,15 @@ export default function App() {
           <>
             {tab === 'tracker' && (
               <Tracker
+                records={records}
+                reload={reload}
+                showToast={showToast}
+                confirm={confirm}
+                onEdit={(r) => openModal(r)}
+              />
+            )}
+            {tab === 'tracker-v2' && (
+              <TrackerV2
                 records={records}
                 reload={reload}
                 showToast={showToast}
