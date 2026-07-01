@@ -94,32 +94,37 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenRes
   return data as TokenResponse;
 }
 
-/** Fetches the signed-in Microsoft user's profile via Graph. */
-export async function fetchMsProfile(accessToken: string): Promise<{
-  id: string;
-  displayName: string;
-  userPrincipalName: string;
-  mail: string | null;
-}> {
-  const res = await fetch('https://graph.microsoft.com/v1.0/me', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) throw new Error(`graph /me failed: ${res.status}`);
-  return res.json();
+interface IdTokenClaims {
+  oid?: string;
+  sub?: string;
+  email?: string;
+  preferred_username?: string;
+  upn?: string;
+  name?: string;
 }
 
-/** Stores tokens + profile in the singleton `ms_account` row. */
+/** Decodes the JWT payload without signature verification. */
+function decodeIdToken(idToken: string): IdTokenClaims {
+  const parts = idToken.split('.');
+  if (parts.length !== 3) throw new Error('invalid id_token');
+  const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+  return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+}
+
+/** Stores tokens + profile (from id_token) in the singleton `ms_account` row. */
 export async function saveAccount(tokens: TokenResponse): Promise<MsAccount> {
-  const profile = await fetchMsProfile(tokens.access_token);
+  if (!tokens.id_token) throw new Error('no id_token in response');
+  const claims = decodeIdToken(tokens.id_token);
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
   const { data, error } = await supabase()
     .from('ms_account')
     .upsert(
       {
         id: 'default',
-        ms_user_id: profile.id,
-        ms_email: profile.mail ?? profile.userPrincipalName,
-        ms_name: profile.displayName,
+        ms_user_id: claims.oid ?? claims.sub ?? null,
+        ms_email: claims.email ?? claims.preferred_username ?? claims.upn ?? null,
+        ms_name: claims.name ?? null,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         expires_at: expiresAt,
