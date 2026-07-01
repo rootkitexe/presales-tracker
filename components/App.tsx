@@ -14,6 +14,7 @@ import Dashboard from './Dashboard';
 import HubspotTab from './HubspotTab';
 import RecordModal from './RecordModal';
 import ConfirmDialog, { type ConfirmOptions } from './ConfirmDialog';
+import OutlookConnect from './OutlookConnect';
 
 type Tab = 'tracker' | 'tracker-v2' | 'import' | 'bulkjd' | 'salesform' | 'dashboard' | 'hubspot';
 
@@ -138,6 +139,7 @@ export default function App() {
           <button className="btn" onClick={reload}>
             ↻ Refresh
           </button>
+          <OutlookConnect showToast={showToast} />
           <button className="btn btn-d" onClick={doLogout}>
             ⎋ Log out
           </button>
