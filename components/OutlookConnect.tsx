@@ -64,17 +64,49 @@ export default function OutlookConnect({
     }
   }
 
+  async function pollNow() {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/inbound-mail/poll', { method: 'POST' });
+      const data = await res.json();
+      if (!data.ok) {
+        showToast(`Poll failed: ${data.error ?? 'unknown'}`, 'err');
+        return;
+      }
+      const { newCount, totalChecked, errors } = data;
+      const errPart = errors?.length ? ` (${errors.length} errors)` : '';
+      showToast(
+        `Poll done: ${newCount} new · ${totalChecked} checked${errPart}`,
+        newCount > 0 ? 'ok' : '',
+      );
+    } catch (e) {
+      showToast(`Poll failed: ${(e as Error).message}`, 'err');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (status.connected) {
     return (
-      <button
-        className="btn"
-        onClick={disconnect}
-        disabled={loading}
-        title={`Connected: ${status.email ?? 'unknown'}`}
-        style={{ color: 'var(--success)', borderColor: '#bbf7d0', background: 'var(--sl)' }}
-      >
-        ✓ Outlook: {status.email ?? 'connected'}
-      </button>
+      <>
+        <button
+          className="btn"
+          onClick={pollNow}
+          disabled={loading}
+          title="Fetch new AM emails from Outlook"
+        >
+          {loading ? '…' : '↓ Poll'}
+        </button>
+        <button
+          className="btn"
+          onClick={disconnect}
+          disabled={loading}
+          title={`Click to disconnect · Connected: ${status.email ?? 'unknown'}`}
+          style={{ color: 'var(--success)', borderColor: '#bbf7d0', background: 'var(--sl)' }}
+        >
+          ✓ Outlook: {status.email ?? 'connected'}
+        </button>
+      </>
     );
   }
 
