@@ -15,12 +15,23 @@ import HubspotTab from './HubspotTab';
 import RecordModal from './RecordModal';
 import ConfirmDialog, { type ConfirmOptions } from './ConfirmDialog';
 import OutlookConnect from './OutlookConnect';
+import RecentRequests from './RecentRequests';
+import type { RecordInput } from '@/lib/types';
 
-type Tab = 'tracker' | 'tracker-v2' | 'import' | 'bulkjd' | 'salesform' | 'dashboard' | 'hubspot';
+type Tab =
+  | 'tracker'
+  | 'tracker-v2'
+  | 'recent-requests'
+  | 'import'
+  | 'bulkjd'
+  | 'salesform'
+  | 'dashboard'
+  | 'hubspot';
 
 const TABS: { id: Tab; label: string; hideInNav?: boolean }[] = [
   { id: 'tracker', label: 'All Requests' },
   { id: 'tracker-v2', label: 'All Requests v2' },
+  { id: 'recent-requests', label: 'Recent Requests' },
   { id: 'import', label: 'Import Excel', hideInNav: true },
   { id: 'bulkjd', label: 'Bulk JD Upload', hideInNav: true },
   { id: 'salesform', label: 'Sales Form', hideInNav: true },
@@ -41,6 +52,10 @@ export default function App() {
   } | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalRecord, setModalRecord] = useState<PresalesRecord | null>(null);
+  const [modalInitial, setModalInitial] = useState<Partial<RecordInput> | undefined>(undefined);
+  const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [recentRefreshTick, setRecentRefreshTick] = useState(0);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -75,8 +90,33 @@ export default function App() {
 
   function openModal(record: PresalesRecord | null) {
     setModalRecord(record);
+    setModalInitial(undefined);
+    setPendingSourceId(null);
     setModalOpen(true);
   }
+
+  function openModalFromRecent(initial: Partial<RecordInput>, sourceId: string) {
+    setModalRecord(null);
+    setModalInitial(initial);
+    setPendingSourceId(sourceId);
+    setModalOpen(true);
+  }
+
+  const fetchPendingCount = useCallback(async () => {
+    try {
+      const res = await fetch('/api/recent-requests');
+      const data = await res.json();
+      if (data.ok) setPendingCount(data.items?.length ?? 0);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPendingCount();
+    const t = window.setInterval(fetchPendingCount, 60_000);
+    return () => window.clearInterval(t);
+  }, [fetchPendingCount]);
 
   async function doLogout() {
     await logout();
@@ -139,7 +179,13 @@ export default function App() {
           <button className="btn" onClick={reload}>
             ↻ Refresh
           </button>
-          <OutlookConnect showToast={showToast} />
+          <OutlookConnect
+            showToast={showToast}
+            onPollComplete={() => {
+              fetchPendingCount();
+              setRecentRefreshTick((t) => t + 1);
+            }}
+          />
           <button className="btn btn-d" onClick={doLogout}>
             ⎋ Log out
           </button>
@@ -154,6 +200,9 @@ export default function App() {
             onClick={() => setTab(t.id)}
           >
             {t.label}
+            {t.id === 'recent-requests' && pendingCount > 0 && (
+              <span className="tab-badge">{pendingCount}</span>
+            )}
           </button>
         ))}
       </nav>
@@ -207,6 +256,13 @@ export default function App() {
                 onEdit={(r) => openModal(r)}
               />
             )}
+            {tab === 'recent-requests' && (
+              <RecentRequests
+                showToast={showToast}
+                onAddToTracker={openModalFromRecent}
+                refreshTick={recentRefreshTick}
+              />
+            )}
             {tab === 'import' && (
               <ImportTab
                 records={records}
@@ -239,6 +295,22 @@ export default function App() {
           reload={reload}
           showToast={showToast}
           onClose={() => setModalOpen(false)}
+          initial={modalInitial}
+          onSaved={async () => {
+            if (pendingSourceId) {
+              try {
+                await fetch(`/api/recent-requests/${pendingSourceId}/mark-processed`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ processedRecordId: null }),
+                });
+              } catch {
+                // ignore — record was saved successfully; the source will just remain pending
+              }
+              setRecentRefreshTick((t) => t + 1);
+              fetchPendingCount();
+            }
+          }}
         />
       )}
 

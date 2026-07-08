@@ -14,6 +14,10 @@ interface Props {
   reload: () => Promise<void>;
   showToast: (msg: string, type?: '' | 'ok' | 'err') => void;
   onClose: () => void;
+  /** Pre-fill values for a new request (only used when record is null). */
+  initial?: Partial<RecordInput>;
+  /** Fired after a successful save (create or update). Passes the input just saved. */
+  onSaved?: (input: RecordInput) => void;
 }
 
 function ymd(d: Date) {
@@ -22,18 +26,27 @@ function ymd(d: Date) {
   ).padStart(2, '0')}`;
 }
 
-export default function RecordModal({ record, persons, reload, showToast, onClose }: Props) {
-  const [person, setPerson] = useState(record?.person ?? '');
-  const [customer, setCustomer] = useState(record?.customer ?? '');
-  const [date, setDate] = useState(record?.date ?? '');
-  const [status, setStatus] = useState(record?.status ?? '');
-  const [account, setAccount] = useState(record?.account ?? '');
-  const [tara, setTara] = useState(record?.tara ?? '');
-  const [notes, setNotes] = useState(record?.notes ?? '');
+export default function RecordModal({
+  record,
+  persons,
+  reload,
+  showToast,
+  onClose,
+  initial,
+  onSaved,
+}: Props) {
+  const seed = record ?? initial;
+  const [person, setPerson] = useState(seed?.person ?? '');
+  const [customer, setCustomer] = useState(seed?.customer ?? '');
+  const [date, setDate] = useState(seed?.date ?? '');
+  const [status, setStatus] = useState(seed?.status ?? '');
+  const [account, setAccount] = useState(seed?.account ?? '');
+  const [tara, setTara] = useState(seed?.tara ?? '');
+  const [notes, setNotes] = useState(seed?.notes ?? '');
   const [assessments, setAssessments] = useState<Assessment[]>(
-    record?.assessments?.length ? record.assessments : [{ name: '', qb: '' }],
+    seed?.assessments?.length ? seed.assessments : [{ name: '', qb: '' }],
   );
-  const [jd, setJd] = useState<JdFile[]>(record?.jd_files ?? []);
+  const [jd, setJd] = useState<JdFile[]>(seed?.jd_files ?? []);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -79,6 +92,7 @@ export default function RecordModal({ record, persons, reload, showToast, onClos
       else await createRecords([payload]);
       await reload();
       showToast(record ? '✓ Record updated' : '✓ Record added', 'ok');
+      onSaved?.(payload);
       onClose();
     } catch (e) {
       showToast((e as Error).message, 'err');

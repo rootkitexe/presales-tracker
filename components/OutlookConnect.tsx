@@ -10,8 +10,10 @@ interface Status {
 
 export default function OutlookConnect({
   showToast,
+  onPollComplete,
 }: {
   showToast: (msg: string, type?: '' | 'ok' | 'err') => void;
+  onPollComplete?: () => void;
 }) {
   const [status, setStatus] = useState<Status>({ connected: false });
   const [loading, setLoading] = useState(false);
@@ -80,6 +82,7 @@ export default function OutlookConnect({
         `Poll done: ${newCount} new · ${totalChecked} checked${filterPart}${errPart}`,
         newCount > 0 ? 'ok' : '',
       );
+      onPollComplete?.();
     } catch (e) {
       showToast(`Poll failed: ${(e as Error).message}`, 'err');
     } finally {

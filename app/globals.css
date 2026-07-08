@@ -156,6 +156,23 @@ body {
   background: var(--accent-soft);
   font-weight: 600;
 }
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-left: 6px;
+  line-height: 1;
+}
+.tab.active .tab-badge { background: var(--accent-hover); }
 
 .main {
   flex: 1;
@@ -1445,6 +1462,86 @@ tbody tr td:first-child::before {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* =========================================================
+   RecentRequests tab — cards of pending inbound emails
+   ========================================================= */
+.rr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rr-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--t), box-shadow var(--t), transform var(--t);
+}
+.rr-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+}
+.rr-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.rr-from {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.rr-from-name { color: var(--text); font-weight: 600; }
+.rr-from-mapped { color: var(--accent); font-weight: 500; }
+.rr-time { color: var(--subtle); }
+.rr-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.rr-subject {
+  font-family: var(--font-display), var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  margin-bottom: 8px;
+}
+.rr-parsed {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  background: var(--accent-soft);
+  border-radius: 6px;
+  display: inline-block;
+}
+.rr-parsed-label { color: var(--muted); }
+.rr-parsed strong { color: var(--accent); font-weight: 700; }
+.rr-preview {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.55;
+  padding: 10px 12px;
+  background: var(--surface2);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  margin-bottom: 8px;
+}
+.rr-attach {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rr-attach-note {
+  font-size: 11.5px;
+  color: var(--subtle);
+  font-style: italic;
 }
 
 /* =========================================================
