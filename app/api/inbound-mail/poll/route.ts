@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getValidAccessToken, getAccount } from '@/lib/ms-oauth';
 import { AM_EMAILS_LOWER } from '@/lib/am-list';
+import { looksLikeRequest } from '@/lib/mail-filter';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,10 +89,16 @@ async function runPoll() {
   const db = supabase();
 
   let newCount = 0;
+  let filteredOut = 0;
   const errors: string[] = [];
 
   for (const msg of messages) {
     try {
+      if (!looksLikeRequest(msg.subject, msg.bodyPreview)) {
+        filteredOut++;
+        continue;
+      }
+
       const { data: existing } = await db
         .from('recent_requests')
         .select('id')
@@ -133,6 +140,7 @@ async function runPoll() {
     ok: true,
     newCount,
     totalChecked: messages.length,
+    filteredOut,
     errors,
     status: 200 as const,
   };

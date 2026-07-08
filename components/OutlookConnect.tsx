@@ -73,10 +73,11 @@ export default function OutlookConnect({
         showToast(`Poll failed: ${data.error ?? 'unknown'}`, 'err');
         return;
       }
-      const { newCount, totalChecked, errors } = data;
+      const { newCount, totalChecked, filteredOut, errors } = data;
       const errPart = errors?.length ? ` (${errors.length} errors)` : '';
+      const filterPart = filteredOut ? ` · ${filteredOut} filtered` : '';
       showToast(
-        `Poll done: ${newCount} new · ${totalChecked} checked${errPart}`,
+        `Poll done: ${newCount} new · ${totalChecked} checked${filterPart}${errPart}`,
         newCount > 0 ? 'ok' : '',
       );
     } catch (e) {
