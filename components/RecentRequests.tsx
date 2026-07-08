@@ -5,6 +5,7 @@ import type { JdFile, RecordInput } from '@/lib/types';
 import { personFromEmail } from '@/lib/am-list';
 import { parseCustomerFromSubject } from '@/lib/subject-parser';
 import { fileIcon, fileSize } from '@/lib/format';
+import RecentRequestReader from './RecentRequestReader';
 
 interface RecentRequest {
   id: string;
@@ -69,6 +70,7 @@ function toJdFiles(atts: RecentRequest['attachments']): JdFile[] {
 export default function RecentRequests({ showToast, onAddToTracker, refreshTick }: Props) {
   const [items, setItems] = useState<RecentRequest[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [readerId, setReaderId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -134,7 +136,27 @@ export default function RecentRequests({ showToast, onAddToTracker, refreshTick 
     );
   }
 
+  const readerItem = readerId ? items.find((r) => r.id === readerId) : null;
+
   return (
+    <>
+      {readerItem && (
+        <RecentRequestReader
+          recentId={readerItem.id}
+          subject={readerItem.subject}
+          fromName={readerItem.from_name}
+          fromEmail={readerItem.from_email}
+          receivedAt={readerItem.received_at}
+          attachments={toJdFiles(readerItem.attachments)}
+          showToast={showToast}
+          onClose={() => setReaderId(null)}
+          onAdd={() => handleAdd(readerItem)}
+          onDismiss={() => {
+            dismiss(readerItem.id);
+            setReaderId(null);
+          }}
+        />
+      )}
     <div className="rr-list">
       {items.map((req) => {
         const person = personFromEmail(req.from_email);
@@ -168,7 +190,14 @@ export default function RecentRequests({ showToast, onAddToTracker, refreshTick 
               </div>
             </div>
 
-            <div className="rr-subject">{req.subject || '(no subject)'}</div>
+            <button
+              type="button"
+              className="rr-subject rr-clickable"
+              onClick={() => setReaderId(req.id)}
+              title="Click to read full email"
+            >
+              {req.subject || '(no subject)'}
+            </button>
 
             {customer && (
               <div className="rr-parsed">
@@ -178,7 +207,14 @@ export default function RecentRequests({ showToast, onAddToTracker, refreshTick 
             )}
 
             {req.body_preview && (
-              <div className="rr-preview">{req.body_preview.trim()}</div>
+              <button
+                type="button"
+                className="rr-preview rr-clickable"
+                onClick={() => setReaderId(req.id)}
+                title="Click to read full email"
+              >
+                {req.body_preview.trim()}
+              </button>
             )}
 
             {jds.length > 0 && (
@@ -199,5 +235,6 @@ export default function RecentRequests({ showToast, onAddToTracker, refreshTick 
         );
       })}
     </div>
+    </>
   );
 }
