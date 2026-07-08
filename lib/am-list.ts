@@ -12,6 +12,7 @@ export const AM_EMAILS = [
   'ros@imocha.io', // Roshan
   'Sarvesh@imocha.io',
   'ambarish.kolankar@imocha.io',
+  'subham.das@imocha.co', // self — for testing incoming request flow
 ] as const;
 
 export const AM_EMAILS_LOWER = AM_EMAILS.map((e) => e.toLowerCase());
