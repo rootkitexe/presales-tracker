@@ -29,9 +29,9 @@ type Tab =
   | 'hubspot';
 
 const TABS: { id: Tab; label: string; hideInNav?: boolean }[] = [
-  { id: 'tracker', label: 'All Requests' },
-  { id: 'tracker-v2', label: 'All Requests v2' },
   { id: 'recent-requests', label: 'Recent Requests' },
+  { id: 'tracker-v2', label: 'All Requests' },
+  { id: 'tracker', label: 'All Requests (v1)', hideInNav: true },
   { id: 'import', label: 'Import Excel', hideInNav: true },
   { id: 'bulkjd', label: 'Bulk JD Upload', hideInNav: true },
   { id: 'salesform', label: 'Sales Form', hideInNav: true },
@@ -44,7 +44,7 @@ export default function App() {
   const [records, setRecords] = useState<PresalesRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState<Tab>('tracker');
+  const [tab, setTab] = useState<Tab>('tracker-v2');
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
   const [confirmState, setConfirmState] = useState<{
     opts: ConfirmOptions;
