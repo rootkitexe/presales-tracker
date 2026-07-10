@@ -3,6 +3,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { PresalesRecord } from '@/lib/types';
 import { getInitials, avatarColor } from '@/lib/avatar';
+import AIChat from './AIChat';
 
 function normKey(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ').replace(/[-–]\s*/g, '-');
@@ -289,7 +290,13 @@ function StatCard({
   );
 }
 
-export default function Dashboard({ records }: { records: PresalesRecord[] }) {
+export default function Dashboard({
+  records,
+  showToast,
+}: {
+  records: PresalesRecord[];
+  showToast: (msg: string, type?: '' | 'ok' | 'err') => void;
+}) {
   const total = records.length;
   const won = records.filter((r) => isWon(r.status)).length;
   const lost = records.filter((r) => isLost(r.status)).length;
@@ -378,6 +385,10 @@ export default function Dashboard({ records }: { records: PresalesRecord[] }) {
             </div>
           )}
         </div>
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <AIChat showToast={showToast} />
       </div>
     </div>
   );

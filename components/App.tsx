@@ -282,7 +282,7 @@ export default function App() {
                 goToTab={goToTab}
               />
             )}
-            {tab === 'dashboard' && <Dashboard records={records} />}
+            {tab === 'dashboard' && <Dashboard records={records} showToast={showToast} />}
             {tab === 'hubspot' && <HubspotTab />}
           </>
         )}
