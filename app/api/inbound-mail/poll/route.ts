@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server';
 import { isAuthenticated } from '@/lib/auth';
-import { getSupabase } from '@/lib/supabase';
+import { getSql, json } from '@/lib/db';
 import { getValidAccessToken, getAccount } from '@/lib/ms-oauth';
 import { AM_EMAILS_LOWER } from '@/lib/am-list';
 import { looksLikeRequest } from '@/lib/mail-filter';
 
 export const dynamic = 'force-dynamic';
-
-const supabase = getSupabase;
 
 interface GraphMessage {
   id: string;
@@ -58,8 +56,9 @@ async function runPoll() {
 
   const account = await getAccount();
   // First poll: look back 30 days. Subsequent polls: since last poll.
-  const since =
-    account?.last_polled_at ?? new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const since = new Date(
+    account?.last_polled_at ?? Date.now() - 30 * 86_400_000,
+  ).toISOString();
 
   const fromFilter = AM_EMAILS_LOWER.map(
     (e) => `from/emailAddress/address eq '${e}'`,
@@ -86,7 +85,7 @@ async function runPoll() {
 
   const data = await res.json();
   const messages: GraphMessage[] = data.value ?? [];
-  const db = supabase();
+  const sql = getSql();
 
   let newCount = 0;
   let filteredOut = 0;
@@ -99,11 +98,7 @@ async function runPoll() {
         continue;
       }
 
-      const { data: existing } = await db
-        .from('recent_requests')
-        .select('id')
-        .eq('ms_message_id', msg.id)
-        .maybeSingle();
+      const [existing] = await sql`select id from recent_requests where ms_message_id = ${msg.id}`;
       if (existing) continue;
 
       let attachments: unknown[] = [];
@@ -111,30 +106,27 @@ async function runPoll() {
         attachments = await fetchAttachments(accessToken, msg.id);
       }
 
-      const { error: insertError } = await db.from('recent_requests').insert({
-        ms_message_id: msg.id,
-        from_name: msg.from?.emailAddress?.name ?? null,
-        from_email: msg.from?.emailAddress?.address ?? '',
-        subject: msg.subject ?? '',
-        body_preview: msg.bodyPreview ?? '',
-        received_at: msg.receivedDateTime,
-        attachments,
-        has_attachments: msg.hasAttachments,
-      });
-      if (insertError) throw insertError;
+      await sql`
+        insert into recent_requests
+          (ms_message_id, from_name, from_email, subject, body_preview, received_at,
+           attachments, has_attachments)
+        values
+          (${msg.id}, ${msg.from?.emailAddress?.name ?? null},
+           ${msg.from?.emailAddress?.address ?? ''}, ${msg.subject ?? ''},
+           ${msg.bodyPreview ?? ''}, ${msg.receivedDateTime},
+           ${json(attachments)}, ${msg.hasAttachments})
+        on conflict (ms_message_id) do nothing`;
       newCount++;
     } catch (e) {
       errors.push(`msg ${msg.id}: ${(e as Error).message}`);
     }
   }
 
-  await db
-    .from('ms_account')
-    .update({
-      last_polled_at: new Date().toISOString(),
-      last_poll_error: errors.length ? errors.join('; ').slice(0, 500) : null,
-    })
-    .eq('id', 'default');
+  await sql`
+    update ms_account set
+      last_polled_at = now(),
+      last_poll_error = ${errors.length ? errors.join('; ').slice(0, 500) : null}
+    where id = 'default'`;
 
   return {
     ok: true,

@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server';
 import { isAuthenticated } from '@/lib/auth';
-import { getSupabase } from '@/lib/supabase';
+import { getSql, isUuid } from '@/lib/db';
 import { getValidAccessToken } from '@/lib/ms-oauth';
 
 export const dynamic = 'force-dynamic';
-
-const supabase = getSupabase;
 
 interface GraphRecipient {
   emailAddress?: { name?: string; address?: string };
@@ -16,13 +14,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
   const { id } = await ctx.params;
+  if (!isUuid(id)) return NextResponse.json({ ok: false, error: 'not found' }, { status: 404 });
   try {
-    const { data: row, error: rowError } = await supabase()
-      .from('recent_requests')
-      .select('ms_message_id')
-      .eq('id', id)
-      .maybeSingle();
-    if (rowError) throw rowError;
+    const [row] = await getSql()`select ms_message_id from recent_requests where id = ${id}`;
     if (!row) return NextResponse.json({ ok: false, error: 'not found' }, { status: 404 });
 
     const token = await getValidAccessToken();

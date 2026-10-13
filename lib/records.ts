@@ -2,10 +2,6 @@
 
 import type { JdFile, RecordFields, RecordInput } from './types';
 
-/** Columns returned by list/write endpoints. Reads go through the `records_list`
- *  view, which strips JD file bytes — see supabase-egress-fix.sql. */
-export const LIST_VIEW = 'records_list';
-
 /** Normalises an untrusted payload into the editable record fields. */
 export function sanitizeFields(r: Record<string, unknown>): RecordFields {
   return {

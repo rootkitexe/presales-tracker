@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isAuthenticated } from '@/lib/auth';
-import { getSupabase } from '@/lib/supabase';
+import { getSql } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,13 +12,11 @@ export async function GET() {
     return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
   try {
-    const { data, error } = await getSupabase()
-      .from('recent_requests_list')
-      .select('*')
-      .eq('status', 'pending')
-      .order('received_at', { ascending: false });
-    if (error) throw error;
-    return NextResponse.json({ ok: true, items: data ?? [] });
+    const items = await getSql()`
+      select * from recent_requests_list
+      where status = 'pending'
+      order by received_at desc`;
+    return NextResponse.json({ ok: true, items });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
   }

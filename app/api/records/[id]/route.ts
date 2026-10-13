@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isAuthenticated } from '@/lib/auth';
-import { getSupabase } from '@/lib/supabase';
+import { getSql, isUuid, json } from '@/lib/db';
 import { sanitizeFields } from '@/lib/records';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -13,22 +13,24 @@ export async function PUT(request: Request, ctx: Ctx) {
   }
   try {
     const { id } = await ctx.params;
-    const patch = sanitizeFields(await request.json());
-    if (!patch.person || !patch.customer) {
+    if (!isUuid(id)) return NextResponse.json({ error: 'Record not found.' }, { status: 404 });
+    const p = sanitizeFields(await request.json());
+    if (!p.person || !p.customer) {
       return NextResponse.json(
         { error: 'Person and customer are required.' },
         { status: 400 },
       );
     }
-    const supabase = getSupabase();
-    const { data, error } = await supabase
-      .from('records')
-      .update(patch)
-      .eq('id', id)
-      .select('id')
-      .single();
-    if (error) throw error;
-    return NextResponse.json({ record: data });
+    const sql = getSql();
+    const [record] = await sql`
+      update records set
+        person = ${p.person}, customer = ${p.customer}, status = ${p.status},
+        account = ${p.account}, tara = ${p.tara}, notes = ${p.notes}, date = ${p.date},
+        assessments = ${json(p.assessments)}
+      where id = ${id}
+      returning id`;
+    if (!record) return NextResponse.json({ error: 'Record not found.' }, { status: 404 });
+    return NextResponse.json({ record });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
@@ -41,9 +43,8 @@ export async function DELETE(_request: Request, ctx: Ctx) {
   }
   try {
     const { id } = await ctx.params;
-    const supabase = getSupabase();
-    const { error } = await supabase.from('records').delete().eq('id', id);
-    if (error) throw error;
+    if (!isUuid(id)) return NextResponse.json({ error: 'Record not found.' }, { status: 404 });
+    await getSql()`delete from records where id = ${id}`;
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

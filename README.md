@@ -1,38 +1,61 @@
 # Presales Tracker
 
-The original single-file `presales_tracker.html` ported to **Next.js 16 + Supabase**, with a shared-password gate. All data now lives in a real Postgres database — no more save/load JSON files.
+The original single-file `presales_tracker.html` ported to **Next.js 16 + Postgres**, with a shared-password gate. Hosted on **Railway** (app + database in one project).
 
 ## Stack
 
 - **Next.js 16** (App Router, React 19, Turbopack)
-- **Supabase** — Postgres for records (file-storage decision deferred — see below)
+- **Postgres** via [`postgres`](https://github.com/porsager/postgres) (postgres.js) — server-side only, see [`lib/db.ts`](./lib/db.ts)
 - **Tailwind CSS v4** utilities; the original cream/beige theme is ported verbatim into `app/globals.css`
 - **xlsx** for Excel import/export
+- Integrations: **Outlook** (Microsoft Graph, Mail.Read) for incoming AM requests, **HubSpot** (deals/companies), **OpenRouter** (AI assistant on the Dashboard)
 - Shared password gate: `APP_PASSWORD` → sha256 → httpOnly cookie → server-side verified in `proxy.ts`, `app/page.tsx`, and every API route
 
-## Quick start
+## Quick start (local)
 
 ```bash
 cd presales-tracker
-# .env.local already exists with APP_PASSWORD set; just fill in the Supabase values
-npm install                        # already done if you ran create-next-app
+cp .env.local.example .env.local   # then fill in the values
+npm install
+node --env-file=.env.local scripts/db-setup.mjs   # create tables/views (idempotent)
 npm run dev
 ```
 
 Open http://localhost:3000, enter the password, and you're in.
 
-## Supabase setup
+## Environment variables
 
-1. Create a free project at https://supabase.com (no credit card needed).
-2. **Project Settings → Data API → Project URL** → paste into `SUPABASE_URL`.
-3. **Project Settings → API Keys → `service_role` key** → paste into `SUPABASE_SERVICE_ROLE_KEY`. **Keep secret** — it is server-only and bypasses Row Level Security.
-4. **SQL Editor → New query** → run these files, in this order:
-   1. [`supabase-schema.sql`](./supabase-schema.sql) — `records` table
-   2. [`supabase-ms-account.sql`](./supabase-ms-account.sql) — Outlook token storage
-   3. [`supabase-recent-requests.sql`](./supabase-recent-requests.sql) — polled AM emails
-   4. [`supabase-egress-fix.sql`](./supabase-egress-fix.sql) — list views without file bytes, file functions, RLS on the Outlook tables. **Required** — the API reads through these views.
+| Variable | Purpose |
+|---|---|
+| `APP_PASSWORD` | Shared login password |
+| `DATABASE_URL` | Postgres connection string. Locally: the database's **public** URL. On Railway: `${{Postgres.DATABASE_URL}}` (private network) |
+| `HUBSPOT_TOKEN` | HubSpot private-app token (HubSpot tab + AI search). Optional `HUBSPOT_PORTAL_ID` enables "Open ↗" links |
+| `AZURE_AD_CLIENT_ID`, `AZURE_AD_TENANT_ID`, `AZURE_AD_CLIENT_SECRET` | Azure app registration for Outlook. **Client secrets expire** — renew before the expiry date |
+| `NEXTAUTH_URL` | Public base URL of the app, e.g. `https://<app>.up.railway.app`. The Azure redirect URI must be `<NEXTAUTH_URL>/api/auth/callback/azure-ad` |
+| `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` | AI assistant |
 
-Refresh the app and records load from Postgres.
+## Database
+
+[`schema.sql`](./schema.sql) defines everything: `records`, `ms_account` (connected Outlook account), `recent_requests` (polled AM emails), and two list views. Apply it with:
+
+```bash
+node --env-file=.env.local scripts/db-setup.mjs
+```
+
+The script is idempotent — re-run it after pulling schema changes. Only the app server connects to the database; the browser goes through `/api/*`.
+
+**Egress rule:** list endpoints never return file bytes. `/api/records` and `/api/recent-requests` read the `records_list` / `recent_requests_list` views (names, sizes, types only); a file's bytes are fetched one at a time via `/api/records/:id/files/:idx` or `/api/recent-requests/:id/attachments` when someone opens it. Edits never re-send existing files — they are added/removed via `/api/records/:id/files`. Keep it that way: selecting `jd_files` or `attachments` in a list query is what exhausted the old Supabase/Vercel free-tier quotas.
+
+## Deploy to Railway
+
+1. Railway → **New Project → Deploy from GitHub repo** → this repo. Railway detects Next.js (`npm run build` / `npm start`).
+2. In the same project: **+ New → Database → PostgreSQL**.
+3. App service → **Variables**: add the variables above, with `DATABASE_URL = ${{Postgres.DATABASE_URL}}`.
+4. App service → **Settings → Networking → Generate Domain**; set `NEXTAUTH_URL` to it.
+5. Run `scripts/db-setup.mjs` once against the database's public URL (from your machine) to create the schema.
+6. Ask the Azure app owner to add `<NEXTAUTH_URL>/api/auth/callback/azure-ad` as a redirect URI, then **Connect Outlook** once in the app.
+
+Every push to `main` redeploys.
 
 ## Importing an old session JSON
 
@@ -53,76 +76,49 @@ It maps the old `jdFiles` shape onto the new `jd_files` column, so attached file
 
 ## The password gate
 
-- Set `APP_PASSWORD` in `.env.local`. Anyone with that password can log in at `/login` and gets full access.
+- Set `APP_PASSWORD` in `.env.local` (and in Railway's variables). Anyone with that password can log in at `/login` and gets full access.
 - The cookie value stored in the browser is `sha256(APP_PASSWORD)` — knowing the cookie does not reveal the password.
 - Verification happens **server-side** in three places:
-  1. `proxy.ts` — fast optimistic cookie-presence check (Edge runtime; in Next.js 16 this file replaces what used to be `middleware.ts`).
+  1. `proxy.ts` — fast optimistic cookie-presence check (in Next.js 16 this file replaces what used to be `middleware.ts`).
   2. `app/page.tsx` — real hash compare before rendering the UI.
-  3. Each `/api/records*` route handler — real hash compare before any DB call.
+  3. Every `/api/*` route handler (except login/logout) — real hash compare before any DB call.
 
-To change the password, edit `APP_PASSWORD` in `.env.local` (or in Vercel's project settings) and ask everyone to log in again.
+To change the password, edit `APP_PASSWORD` and ask everyone to log in again.
 
 ## JD-file storage (deferred — see TODO)
 
-JD files are currently stored as **base64 data URLs inside the `jd_files` JSON column** on each record. This keeps the app fully functional today with no extra service, no credit card, and no new credentials — but it inflates each row. When you decide to add a real storage provider, the migration is small and contained:
+JD files are stored as **base64 data URLs inside the `jd_files` JSON column** on each record. That keeps the app self-contained, and the egress rule above keeps it cheap. If files grow large, move them to object storage:
 
 - Add a `lib/storage.ts` adapter exposing `uploadFile()` / `getFileUrl()` / `deleteFile()`.
 - Change `JdFile.dataUrl` → `JdFile.url` in [`lib/types.ts`](./lib/types.ts) and have the upload path call `uploadFile()` instead of `FileReader`.
-- Pick a provider — **Supabase Storage** stays in this stack with zero new account (1 GB free), **Cloudflare R2** is a stronger free tier (10 GB + zero egress) if you don't mind a credit card and a second service.
-
-**Egress:** list endpoints never return file bytes. `/api/records` and `/api/recent-requests` read the `records_list` / `recent_requests_list` views (names, sizes, types only); a file's bytes are fetched one at a time via `/api/records/:id/files/:idx` or `/api/recent-requests/:id/attachments` when someone opens it. Edits never re-send existing files — they are added/removed via `/api/records/:id/files`. Keep it that way: selecting `jd_files` or `attachments` in a list query is what exhausted the free-tier egress quota.
 
 The touch points are marked `TODO(storage):` in [`lib/types.ts`](./lib/types.ts) and [`lib/files.ts`](./lib/files.ts).
-
-## Deploy to Vercel
-
-1. `git init && git add . && git commit -m "initial"`.
-2. Push to GitHub.
-3. https://vercel.com → New Project → import the repo.
-4. In Project Settings → Environment Variables, add the three values from `.env.local`:
-   - `APP_PASSWORD`
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-5. Deploy.
-
-Vercel auto-detects Next.js; no `vercel.json` is needed.
 
 ## Architecture
 
 ```
 app/
-├── layout.tsx              root layout
-├── globals.css             theme ported from the original HTML
-├── page.tsx                protected entry; renders <App/>
-├── login/page.tsx          password form
+├── layout.tsx, page.tsx, login/page.tsx
 └── api/
-    ├── login/route.ts            POST: verify password, set cookie
-    ├── logout/route.ts           POST: clear cookie
-    ├── records/route.ts          GET list / POST create or bulk-replace
-    └── records/[id]/route.ts     PUT update / DELETE remove
+    ├── login, logout                       password gate
+    ├── records/                            GET list / POST create or bulk-replace
+    ├── records/[id]/                       PUT fields / DELETE
+    ├── records/[id]/files[/idx]            POST add / GET one / DELETE one JD file
+    ├── recent-requests/                    pending emails list, /count
+    ├── recent-requests/[id]/               body, attachments, dismiss, mark-processed
+    ├── inbound-mail/poll                   pull new AM emails from Outlook
+    ├── auth/microsoft/*, auth/callback/    Outlook connect / status / disconnect
+    ├── hubspot/{deals,companies}           HubSpot proxy
+    └── ai/chat                             OpenRouter tool-use loop
 
-components/
-├── App.tsx                 client shell: header, tabs, toast, confirm, data
-├── Tracker.tsx             table, filters, stats, inline JD panel
-├── RecordModal.tsx         add / edit form
-├── ImportTab.tsx           Excel parse → column mapper → preview → append/replace
-├── BulkJD.tsx              multi-file upload → assign to records → commit
-├── SalesForm.tsx           focused single-entry form (writes straight to DB)
-├── Dashboard.tsx           stat tiles + bar charts
-├── ConfirmDialog.tsx       promise-based confirm
-└── AssessmentsEditor.tsx   reusable dynamic-list editor
-
-lib/
-├── types.ts                PresalesRecord, Assessment, JdFile, RecordInput
-├── constants.ts            STATUS_OPTIONS, TARA_OPTIONS
-├── format.ts               badge classes, fmtDate, fileSize, fileIcon
-├── api.ts                  client fetch helpers
-├── files.ts                readFilesAsJd, viewJdFile
-├── auth.ts                 server-side password + cookie helpers
-└── supabase.ts             server-only service-role client (lazy singleton)
-
-proxy.ts                    Next.js 16 "Proxy" (was middleware) — optimistic gate
-supabase-schema.sql         DDL: one `records` table + RLS lockdown
+components/   App shell, TrackerV2 (All Requests), RecentRequests (+Reader), Dashboard
+              (+AIChat), HubspotTab, RecordModal; hidden: Tracker v1, ImportTab, BulkJD, SalesForm
+lib/          db.ts (Postgres), auth.ts, api.ts (client fetch helpers), records.ts
+              (payload sanitising), files.ts, ms-oauth.ts, hubspot.ts, ai-tools.ts,
+              am-list.ts, mail-filter.ts, subject-parser.ts, types.ts, constants.ts, format.ts
+schema.sql    tables + list views
+scripts/      db-setup.mjs, import-old-session.mjs
+proxy.ts      Next.js 16 "Proxy" (was middleware) — optimistic gate
 ```
 
 ### Data model
@@ -143,14 +139,6 @@ One `records` row per request:
 | jd_files                | jsonb         | `[{ name, size, type, dataUrl }]` — see TODO |
 | created_at, updated_at  | timestamptz   | `updated_at` maintained by trigger |
 
-**Row Level Security is enabled with no policies** — meaning the anon key cannot touch this table. The app only reaches it via the service-role key from server-side route handlers, which bypass RLS.
-
-### What changed from the original HTML app
-
-- **No more Save / Load JSON** — Postgres persists everything.
-- **Sales Form** now submits straight to the shared DB. (The original exported a JSON file the manager imported back; with shared access, that dance is no longer needed.)
-- All other features — Tracker filters, inline JD upload, Bulk JD assignment, Excel Import with column mapper + duplicate detection, Excel Export, Dashboard — are the same.
-
 ## Scripts
 
 ```bash
@@ -162,9 +150,7 @@ npm run lint
 
 ## Notes on Next.js 16
 
-A few things differ from older Next.js versions:
-
 - `middleware.ts` is now `proxy.ts` (same job, new name).
 - Route Handler `params` is a `Promise` — `await ctx.params`.
 - `cookies()` from `next/headers` is async — `await cookies()`.
-- Tailwind v4 — no `tailwind.config.js`; theme tokens go in CSS. This project just uses plain CSS custom properties on `:root` since the design was hand-rolled.
+- Tailwind v4 — no `tailwind.config.js`; theme tokens go in CSS.

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isAuthenticated } from '@/lib/auth';
-import { getSupabase } from '@/lib/supabase';
+import { getSql, isUuid, json } from '@/lib/db';
 import { sanitizeFiles } from '@/lib/records';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -12,13 +12,18 @@ export async function POST(request: Request, ctx: Ctx) {
   }
   try {
     const { id } = await ctx.params;
+    if (!isUuid(id)) return NextResponse.json({ error: 'Record not found.' }, { status: 404 });
     const body = await request.json();
     const files = sanitizeFiles(body?.files);
     if (!files.length) {
       return NextResponse.json({ error: 'No files to add.' }, { status: 400 });
     }
-    const { error } = await getSupabase().rpc('append_jd_files', { p_id: id, p_files: files });
-    if (error) throw error;
+    const sql = getSql();
+    const [row] = await sql`
+      update records set jd_files = jd_files || ${json(files)}
+      where id = ${id}
+      returning id`;
+    if (!row) return NextResponse.json({ error: 'Record not found.' }, { status: 404 });
     return NextResponse.json({ ok: true, added: files.length });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

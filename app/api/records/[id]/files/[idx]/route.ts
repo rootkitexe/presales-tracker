@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isAuthenticated } from '@/lib/auth';
-import { getSupabase } from '@/lib/supabase';
+import { getSql, isUuid } from '@/lib/db';
 
 type Ctx = { params: Promise<{ id: string; idx: string }> };
 
@@ -17,11 +17,13 @@ export async function GET(_request: Request, ctx: Ctx) {
   try {
     const { id, idx: rawIdx } = await ctx.params;
     const idx = parseIdx(rawIdx);
-    if (idx === null) return NextResponse.json({ error: 'Bad file index.' }, { status: 400 });
-    const { data, error } = await getSupabase().rpc('get_jd_file', { p_id: id, p_idx: idx });
-    if (error) throw error;
-    if (!data) return NextResponse.json({ error: 'File not found.' }, { status: 404 });
-    return NextResponse.json({ file: data });
+    if (idx === null || !isUuid(id)) {
+      return NextResponse.json({ error: 'File not found.' }, { status: 404 });
+    }
+    const [row] = await getSql()`
+      select jd_files -> ${idx}::int as file from records where id = ${id}`;
+    if (!row?.file) return NextResponse.json({ error: 'File not found.' }, { status: 404 });
+    return NextResponse.json({ file: row.file });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
@@ -37,16 +39,14 @@ export async function DELETE(request: Request, ctx: Ctx) {
     const { id, idx: rawIdx } = await ctx.params;
     const idx = parseIdx(rawIdx);
     const name = new URL(request.url).searchParams.get('name') ?? '';
-    if (idx === null || !name) {
+    if (idx === null || !name || !isUuid(id)) {
       return NextResponse.json({ error: 'Bad file index or name.' }, { status: 400 });
     }
-    const { data, error } = await getSupabase().rpc('remove_jd_file', {
-      p_id: id,
-      p_idx: idx,
-      p_name: name,
-    });
-    if (error) throw error;
-    if (!data) {
+    const [row] = await getSql()`
+      update records set jd_files = jd_files - ${idx}::int
+      where id = ${id} and jd_files -> ${idx}::int ->> 'name' = ${name}
+      returning id`;
+    if (!row) {
       return NextResponse.json(
         { error: 'File not found — the record may have changed. Refresh and try again.' },
         { status: 409 },

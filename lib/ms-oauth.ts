@@ -1,7 +1,7 @@
 // Microsoft OAuth 2.0 helper — single-user flow (one connected account per app instance).
 // Tokens are stored in the singleton `ms_account` row keyed by id = 'default'.
 
-import { getSupabase } from './supabase';
+import { getSql } from './db';
 
 const TENANT = process.env.AZURE_AD_TENANT_ID!;
 const CLIENT_ID = process.env.AZURE_AD_CLIENT_ID!;
@@ -11,8 +11,6 @@ const REDIRECT_URI = `${process.env.NEXTAUTH_URL}/api/auth/callback/azure-ad`;
 const AUTH_ORIGIN = `https://login.microsoftonline.com/${TENANT}`;
 const SCOPES = ['openid', 'profile', 'email', 'offline_access', 'Mail.Read'];
 
-const supabase = getSupabase;
-
 export interface MsAccount {
   id: string;
   ms_user_id: string | null;
@@ -20,11 +18,11 @@ export interface MsAccount {
   ms_name: string | null;
   access_token: string;
   refresh_token: string;
-  expires_at: string; // ISO
+  expires_at: Date;
   scope: string | null;
-  connected_at: string;
-  updated_at: string;
-  last_polled_at: string | null;
+  connected_at: Date;
+  updated_at: Date;
+  last_polled_at: Date | null;
   last_poll_error: string | null;
 }
 
@@ -116,32 +114,32 @@ export async function saveAccount(tokens: TokenResponse): Promise<MsAccount> {
   if (!tokens.id_token) throw new Error('no id_token in response');
   const claims = decodeIdToken(tokens.id_token);
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
-  const { data, error } = await supabase()
-    .from('ms_account')
-    .upsert(
-      {
-        id: 'default',
-        ms_user_id: claims.oid ?? claims.sub ?? null,
-        ms_email: claims.email ?? claims.preferred_username ?? claims.upn ?? null,
-        ms_name: claims.name ?? null,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: expiresAt,
-        scope: tokens.scope ?? SCOPES.join(' '),
-      },
-      { onConflict: 'id' },
-    )
-    .select()
-    .single();
-  if (error) throw error;
-  return data as MsAccount;
+  const row = {
+    id: 'default',
+    ms_user_id: claims.oid ?? claims.sub ?? null,
+    ms_email: claims.email ?? claims.preferred_username ?? claims.upn ?? null,
+    ms_name: claims.name ?? null,
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    expires_at: expiresAt,
+    scope: tokens.scope ?? SCOPES.join(' '),
+  };
+  const sql = getSql();
+  const [acct] = await sql<MsAccount[]>`
+    insert into ms_account ${sql(row)}
+    on conflict (id) do update set
+      ms_user_id = excluded.ms_user_id, ms_email = excluded.ms_email,
+      ms_name = excluded.ms_name, access_token = excluded.access_token,
+      refresh_token = excluded.refresh_token, expires_at = excluded.expires_at,
+      scope = excluded.scope
+    returning *`;
+  return acct;
 }
 
 /** Returns the singleton account row, or null if not connected. */
 export async function getAccount(): Promise<MsAccount | null> {
-  const { data, error } = await supabase().from('ms_account').select('*').eq('id', 'default').maybeSingle();
-  if (error) throw error;
-  return data as MsAccount | null;
+  const [acct] = await getSql()<MsAccount[]>`select * from ms_account where id = 'default'`;
+  return acct ?? null;
 }
 
 /** Returns a valid access token, refreshing if within 60s of expiry. */
@@ -153,19 +151,16 @@ export async function getValidAccessToken(): Promise<string | null> {
 
   const refreshed = await refreshAccessToken(acct.refresh_token);
   const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
-  await supabase()
-    .from('ms_account')
-    .update({
-      access_token: refreshed.access_token,
-      refresh_token: refreshed.refresh_token, // MS may rotate; always write back
-      expires_at: newExpiresAt,
-      scope: refreshed.scope ?? acct.scope,
-    })
-    .eq('id', 'default');
+  // MS may rotate the refresh token; always write it back.
+  await getSql()`
+    update ms_account set
+      access_token = ${refreshed.access_token}, refresh_token = ${refreshed.refresh_token},
+      expires_at = ${newExpiresAt}, scope = ${refreshed.scope ?? acct.scope}
+    where id = 'default'`;
   return refreshed.access_token;
 }
 
 /** Removes the stored account (disconnect). */
 export async function disconnect(): Promise<void> {
-  await supabase().from('ms_account').delete().eq('id', 'default');
+  await getSql()`delete from ms_account where id = 'default'`;
 }

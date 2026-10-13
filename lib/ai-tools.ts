@@ -3,10 +3,8 @@
 //   - Tracker: JD file bytes stripped (only names kept).
 //   - HubSpot: deal `amount` + contact PII omitted.
 
-import { getSupabase } from './supabase';
+import { getSql } from './db';
 import { getOwnerMap, getStageMap } from './hubspot';
-
-const supabase = getSupabase;
 
 /* ------------------------------------------------------------------ */
 /* Tracker search                                                     */
@@ -83,13 +81,11 @@ function scoreRecord(r: SanitizedRecord, q: string): number {
 }
 
 export async function searchTracker(query: string, limit = 15): Promise<SanitizedRecord[]> {
-  const { data, error } = await supabase()
-    .from('records_list') // no JD file bytes — only names are used
-    .select(
-      'id,date,person,customer,status,tara,account,notes,assessments,jd_files',
-    );
-  if (error) throw error;
-  const rows = (data ?? []).map(sanitizeRecord);
+  // records_list has no JD file bytes — only names are used.
+  const data = await getSql()<Parameters<typeof sanitizeRecord>[0][]>`
+    select id, date, person, customer, status, tara, account, notes, assessments, jd_files
+    from records_list`;
+  const rows = data.map(sanitizeRecord);
   if (!query.trim()) {
     return rows
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
