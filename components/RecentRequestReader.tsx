@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { JdFile } from '@/lib/types';
 import { fileIcon, fileSize, fmtDate } from '@/lib/format';
-import { viewJdFile } from '@/lib/files';
+import { openJdFile } from '@/lib/files';
 
 interface Recipient {
   name?: string;
@@ -26,7 +26,9 @@ interface Props {
   fromName: string | null;
   fromEmail: string;
   receivedAt: string;
-  attachments: JdFile[];
+  attachments: JdFile[]; // metadata only
+  /** Fetches the attachments with bytes (same order as `attachments`). */
+  loadAttachments: () => Promise<JdFile[]>;
   showToast: (msg: string, type?: '' | 'ok' | 'err') => void;
   onClose: () => void;
   onAdd: () => void;
@@ -45,6 +47,7 @@ export default function RecentRequestReader({
   fromEmail,
   receivedAt,
   attachments,
+  loadAttachments,
   showToast,
   onClose,
   onAdd,
@@ -174,7 +177,11 @@ export default function RecentRequestReader({
                 <button
                   key={i}
                   className="v2-file-link"
-                  onClick={() => viewJdFile(f)}
+                  onClick={() =>
+                    openJdFile(f, async () => (await loadAttachments())[i]).catch((e) =>
+                      showToast((e as Error).message, 'err'),
+                    )
+                  }
                   title={f.name}
                 >
                   <span className="v2-file-icon">{fileIcon(f.name, f.type)}</span>

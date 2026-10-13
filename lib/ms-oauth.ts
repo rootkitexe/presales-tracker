@@ -1,7 +1,7 @@
 // Microsoft OAuth 2.0 helper — single-user flow (one connected account per app instance).
 // Tokens are stored in the singleton `ms_account` row keyed by id = 'default'.
 
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from './supabase';
 
 const TENANT = process.env.AZURE_AD_TENANT_ID!;
 const CLIENT_ID = process.env.AZURE_AD_CLIENT_ID!;
@@ -11,8 +11,7 @@ const REDIRECT_URI = `${process.env.NEXTAUTH_URL}/api/auth/callback/azure-ad`;
 const AUTH_ORIGIN = `https://login.microsoftonline.com/${TENANT}`;
 const SCOPES = ['openid', 'profile', 'email', 'offline_access', 'Mail.Read'];
 
-const supabase = () =>
-  createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+const supabase = getSupabase;
 
 export interface MsAccount {
   id: string;

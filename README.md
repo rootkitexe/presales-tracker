@@ -26,7 +26,11 @@ Open http://localhost:3000, enter the password, and you're in.
 1. Create a free project at https://supabase.com (no credit card needed).
 2. **Project Settings → Data API → Project URL** → paste into `SUPABASE_URL`.
 3. **Project Settings → API Keys → `service_role` key** → paste into `SUPABASE_SERVICE_ROLE_KEY`. **Keep secret** — it is server-only and bypasses Row Level Security.
-4. **SQL Editor → New query** → paste the contents of [`supabase-schema.sql`](./supabase-schema.sql) → Run.
+4. **SQL Editor → New query** → run these files, in this order:
+   1. [`supabase-schema.sql`](./supabase-schema.sql) — `records` table
+   2. [`supabase-ms-account.sql`](./supabase-ms-account.sql) — Outlook token storage
+   3. [`supabase-recent-requests.sql`](./supabase-recent-requests.sql) — polled AM emails
+   4. [`supabase-egress-fix.sql`](./supabase-egress-fix.sql) — list views without file bytes, file functions, RLS on the Outlook tables. **Required** — the API reads through these views.
 
 Refresh the app and records load from Postgres.
 
@@ -65,6 +69,8 @@ JD files are currently stored as **base64 data URLs inside the `jd_files` JSON c
 - Add a `lib/storage.ts` adapter exposing `uploadFile()` / `getFileUrl()` / `deleteFile()`.
 - Change `JdFile.dataUrl` → `JdFile.url` in [`lib/types.ts`](./lib/types.ts) and have the upload path call `uploadFile()` instead of `FileReader`.
 - Pick a provider — **Supabase Storage** stays in this stack with zero new account (1 GB free), **Cloudflare R2** is a stronger free tier (10 GB + zero egress) if you don't mind a credit card and a second service.
+
+**Egress:** list endpoints never return file bytes. `/api/records` and `/api/recent-requests` read the `records_list` / `recent_requests_list` views (names, sizes, types only); a file's bytes are fetched one at a time via `/api/records/:id/files/:idx` or `/api/recent-requests/:id/attachments` when someone opens it. Edits never re-send existing files — they are added/removed via `/api/records/:id/files`. Keep it that way: selecting `jd_files` or `attachments` in a list query is what exhausted the free-tier egress quota.
 
 The touch points are marked `TODO(storage):` in [`lib/types.ts`](./lib/types.ts) and [`lib/files.ts`](./lib/files.ts).
 

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import type { JdFile, PresalesRecord } from '@/lib/types';
-import { updateRecord, toInput } from '@/lib/api';
+import { addJdFiles } from '@/lib/api';
 import { readFilesAsJd } from '@/lib/files';
 import { fileIcon, fileSize } from '@/lib/format';
 
@@ -44,9 +44,8 @@ export default function BulkJD({ records, reload, showToast }: Props) {
     try {
       let assigned = 0;
       for (const [id, newFiles] of groups) {
-        const rec = records.find((r) => r.id === id);
-        if (!rec) continue;
-        await updateRecord(id, toInput({ ...rec, jd_files: [...rec.jd_files, ...newFiles] }));
+        if (!records.some((r) => r.id === id)) continue;
+        await addJdFiles(id, newFiles);
         assigned += newFiles.length;
       }
       await reload();

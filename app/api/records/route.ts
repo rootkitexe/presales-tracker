@@ -1,24 +1,11 @@
 import { NextResponse } from 'next/server';
 import { isAuthenticated } from '@/lib/auth';
 import { getSupabase } from '@/lib/supabase';
+import { LIST_VIEW, sanitizeNew } from '@/lib/records';
 import type { RecordInput } from '@/lib/types';
 
-/** Normalises an untrusted payload into a clean RecordInput row. */
-function sanitize(r: Record<string, unknown>): RecordInput {
-  return {
-    person: String(r.person ?? '').trim(),
-    customer: String(r.customer ?? '').trim(),
-    status: String(r.status ?? ''),
-    account: String(r.account ?? '').trim(),
-    tara: String(r.tara ?? ''),
-    notes: String(r.notes ?? '').trim(),
-    date: String(r.date ?? ''),
-    assessments: Array.isArray(r.assessments) ? r.assessments : [],
-    jd_files: Array.isArray(r.jd_files) ? r.jd_files : [],
-  };
-}
-
-// GET /api/records — list all records, newest first.
+// GET /api/records — list all records, newest first. JD file bytes are omitted
+// (names/sizes only); fetch a file via /api/records/:id/files/:idx.
 export async function GET() {
   if (!(await isAuthenticated())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -26,7 +13,7 @@ export async function GET() {
   try {
     const supabase = getSupabase();
     const { data, error } = await supabase
-      .from('records')
+      .from(LIST_VIEW)
       .select('*')
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -36,7 +23,7 @@ export async function GET() {
   }
 }
 
-// POST /api/records — create records.
+// POST /api/records — create records. Returns only the new ids.
 //   { ...record }            → create one
 //   { records: [...] }       → create many
 //   { records: [...], replace: true } → delete everything, then create many
@@ -48,7 +35,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const replace = body?.replace === true;
     const incoming = Array.isArray(body?.records) ? body.records : [body];
-    const rows = incoming.map(sanitize).filter((r: RecordInput) => r.person && r.customer);
+    const rows = incoming.map(sanitizeNew).filter((r: RecordInput) => r.person && r.customer);
     if (!rows.length) {
       return NextResponse.json(
         { error: 'No valid records (person and customer are required).' },
@@ -60,7 +47,7 @@ export async function POST(request: Request) {
       const { error: delErr } = await supabase.from('records').delete().not('id', 'is', null);
       if (delErr) throw delErr;
     }
-    const { data, error } = await supabase.from('records').insert(rows).select();
+    const { data, error } = await supabase.from('records').insert(rows).select('id');
     if (error) throw error;
     return NextResponse.json({ records: data });
   } catch (e) {

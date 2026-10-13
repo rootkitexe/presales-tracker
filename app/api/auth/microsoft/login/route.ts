@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { authUrl } from '@/lib/ms-oauth';
+import { isAuthenticated } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 const STATE_COOKIE = 'ms_oauth_state';
 
-export async function GET() {
+export async function GET(req: Request) {
+  if (!(await isAuthenticated())) {
+    return NextResponse.redirect(new URL('/login', req.url));
+  }
   const state = crypto.randomBytes(24).toString('hex');
   const res = NextResponse.redirect(authUrl(state));
   res.cookies.set(STATE_COOKIE, state, {

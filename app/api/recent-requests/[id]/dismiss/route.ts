@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { isAuthenticated } from '@/lib/auth';
+import { getSupabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
-const supabase = () =>
-  createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+const supabase = getSupabase;
 
 export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await isAuthenticated())) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
   const { id } = await ctx.params;
   try {
     const { error } = await supabase()

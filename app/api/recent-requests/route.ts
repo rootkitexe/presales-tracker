@@ -1,15 +1,19 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { isAuthenticated } from '@/lib/auth';
+import { getSupabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
-const supabase = () =>
-  createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-
+// GET /api/recent-requests — pending emails, newest first. Attachment bytes are
+// omitted (see the recent_requests_list view); fetch them via
+// /api/recent-requests/:id/attachments.
 export async function GET() {
+  if (!(await isAuthenticated())) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
   try {
-    const { data, error } = await supabase()
-      .from('recent_requests')
+    const { data, error } = await getSupabase()
+      .from('recent_requests_list')
       .select('*')
       .eq('status', 'pending')
       .order('received_at', { ascending: false });

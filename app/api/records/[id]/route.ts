@@ -1,32 +1,19 @@
 import { NextResponse } from 'next/server';
 import { isAuthenticated } from '@/lib/auth';
 import { getSupabase } from '@/lib/supabase';
-import type { RecordInput } from '@/lib/types';
+import { sanitizeFields } from '@/lib/records';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-function sanitize(r: Record<string, unknown>): RecordInput {
-  return {
-    person: String(r.person ?? '').trim(),
-    customer: String(r.customer ?? '').trim(),
-    status: String(r.status ?? ''),
-    account: String(r.account ?? '').trim(),
-    tara: String(r.tara ?? ''),
-    notes: String(r.notes ?? '').trim(),
-    date: String(r.date ?? ''),
-    assessments: Array.isArray(r.assessments) ? r.assessments : [],
-    jd_files: Array.isArray(r.jd_files) ? r.jd_files : [],
-  };
-}
-
-// PUT /api/records/:id — replace a record.
+// PUT /api/records/:id — update a record's fields. JD files are not touched
+// here; they change via /api/records/:id/files so an edit never re-sends them.
 export async function PUT(request: Request, ctx: Ctx) {
   if (!(await isAuthenticated())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
     const { id } = await ctx.params;
-    const patch = sanitize(await request.json());
+    const patch = sanitizeFields(await request.json());
     if (!patch.person || !patch.customer) {
       return NextResponse.json(
         { error: 'Person and customer are required.' },
@@ -38,7 +25,7 @@ export async function PUT(request: Request, ctx: Ctx) {
       .from('records')
       .update(patch)
       .eq('id', id)
-      .select()
+      .select('id')
       .single();
     if (error) throw error;
     return NextResponse.json({ record: data });

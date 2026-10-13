@@ -1,7 +1,7 @@
 // Client-side helpers for talking to the /api/records endpoints.
 // All calls go through the password-gated Next.js API routes.
 
-import type { PresalesRecord, RecordInput } from './types';
+import type { JdFile, PresalesRecord, RecordFields, RecordInput } from './types';
 
 async function jsonOrThrow(res: Response) {
   const data = await res.json().catch(() => ({}));
@@ -17,7 +17,7 @@ export async function fetchRecords(): Promise<PresalesRecord[]> {
 
 export async function createRecords(
   records: RecordInput | RecordInput[],
-): Promise<PresalesRecord[]> {
+): Promise<{ id: string }[]> {
   const body = Array.isArray(records) ? { records } : records;
   const res = await fetch('/api/records', {
     method: 'POST',
@@ -25,28 +25,54 @@ export async function createRecords(
     body: JSON.stringify(body),
   });
   const data = await jsonOrThrow(res);
-  return (data.records ?? []) as PresalesRecord[];
+  return (data.records ?? []) as { id: string }[];
 }
 
 /** Deletes every existing record, then inserts the given ones. */
-export async function replaceAllRecords(records: RecordInput[]): Promise<PresalesRecord[]> {
+export async function replaceAllRecords(records: RecordInput[]): Promise<{ id: string }[]> {
   const res = await fetch('/api/records', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ records, replace: true }),
   });
   const data = await jsonOrThrow(res);
-  return (data.records ?? []) as PresalesRecord[];
+  return (data.records ?? []) as { id: string }[];
 }
 
-export async function updateRecord(id: string, record: RecordInput): Promise<PresalesRecord> {
+/** Updates a record's fields. JD files are changed with addJdFiles / removeJdFile. */
+export async function updateRecord(id: string, fields: RecordFields): Promise<void> {
   const res = await fetch(`/api/records/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(record),
+    body: JSON.stringify(fields),
   });
+  await jsonOrThrow(res);
+}
+
+/** Appends newly picked files (with dataUrl) to a record. */
+export async function addJdFiles(id: string, files: JdFile[]): Promise<void> {
+  if (!files.length) return;
+  const res = await fetch(`/api/records/${id}/files`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files }),
+  });
+  await jsonOrThrow(res);
+}
+
+/** Removes the file at `idx`; `name` must match it (guards against stale lists). */
+export async function removeJdFile(id: string, idx: number, name: string): Promise<void> {
+  const res = await fetch(`/api/records/${id}/files/${idx}?name=${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+  await jsonOrThrow(res);
+}
+
+/** Fetches one stored file including its bytes. */
+export async function fetchJdFile(id: string, idx: number): Promise<JdFile> {
+  const res = await fetch(`/api/records/${id}/files/${idx}`, { cache: 'no-store' });
   const data = await jsonOrThrow(res);
-  return data.record as PresalesRecord;
+  return data.file as JdFile;
 }
 
 export async function deleteRecord(id: string): Promise<void> {
@@ -145,8 +171,8 @@ export async function fetchHubspotCompanies(
   };
 }
 
-/** Strips server-managed fields, leaving a RecordInput suitable for create/update. */
-export function toInput(r: PresalesRecord | RecordInput): RecordInput {
+/** The editable fields of a record, for updateRecord. */
+export function toFields(r: PresalesRecord | RecordInput): RecordFields {
   return {
     person: r.person,
     customer: r.customer,
@@ -156,6 +182,5 @@ export function toInput(r: PresalesRecord | RecordInput): RecordInput {
     notes: r.notes,
     date: r.date,
     assessments: r.assessments ?? [],
-    jd_files: r.jd_files ?? [],
   };
 }

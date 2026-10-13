@@ -28,22 +28,61 @@ export function readFilesAsJd(files: File[]): Promise<JdFile[]> {
   );
 }
 
-/** Opens a base64 file in a new tab (PDF/image) or downloads it. */
-export function viewJdFile(f: JdFile) {
-  const isPDF = f.type.includes('pdf') || /\.pdf$/i.test(f.name);
-  const isImg = /\.(png|jpe?g|gif|webp)$/i.test(f.name);
-  if (isPDF || isImg) {
-    const w = window.open('', '_blank');
-    if (!w) return;
-    w.document.write(
-      isPDF
-        ? `<html><body style="margin:0;background:#333"><iframe src="${f.dataUrl}" style="width:100vw;height:100vh;border:none"></iframe></body></html>`
-        : `<html><body style="margin:0;background:#1a1a1a;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${f.dataUrl}" style="max-width:100%;max-height:100vh;object-fit:contain"></body></html>`,
+function isPdf(f: JdFile) {
+  return f.type.includes('pdf') || /\.pdf$/i.test(f.name);
+}
+
+/** Image MIME type from the file extension (never trust the stored type), or null. */
+function imageType(name: string): string | null {
+  const m = name.toLowerCase().match(/\.(png|jpe?g|gif|webp)$/);
+  if (!m) return null;
+  return m[1] === 'jpg' ? 'image/jpeg' : `image/${m[1]}`;
+}
+
+/**
+ * Opens a JD file in a new tab (PDF/image) or downloads it.
+ *
+ * `f` may be metadata only (no dataUrl) — then `load` fetches the bytes. The tab
+ * is opened before the fetch so popup blockers still treat it as a click.
+ * The viewer gets a blob URL whose type we choose (application/pdf, image/*,
+ * or octet-stream), so a file with a crafted stored type can never be rendered
+ * as HTML in the app's origin.
+ */
+export async function openJdFile(f: JdFile, load?: () => Promise<JdFile>) {
+  const img = imageType(f.name);
+  const viewType = isPdf(f) ? 'application/pdf' : img;
+  const w = viewType ? window.open('', '_blank') : null;
+  try {
+    const full = f.dataUrl ? f : load ? await load() : null;
+    if (!full?.dataUrl) throw new Error('File content unavailable.');
+    const bytes = await (await fetch(full.dataUrl)).blob();
+    const url = URL.createObjectURL(
+      new Blob([bytes], { type: viewType ?? 'application/octet-stream' }),
     );
-  } else {
-    const a = document.createElement('a');
-    a.href = f.dataUrl;
-    a.download = f.name;
-    a.click();
+    if (w) {
+      w.location.href = url;
+    } else {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = f.name;
+      a.click();
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (e) {
+    w?.close();
+    throw e;
   }
+}
+
+/** Always downloads (never opens) a JD file. */
+export async function downloadJdFile(f: JdFile, load?: () => Promise<JdFile>) {
+  const full = f.dataUrl ? f : load ? await load() : null;
+  if (!full?.dataUrl) throw new Error('File content unavailable.');
+  const bytes = await (await fetch(full.dataUrl)).blob();
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = f.name;
+  a.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

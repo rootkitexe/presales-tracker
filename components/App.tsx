@@ -104,18 +104,28 @@ export default function App() {
 
   const fetchPendingCount = useCallback(async () => {
     try {
-      const res = await fetch('/api/recent-requests');
+      const res = await fetch('/api/recent-requests/count');
       const data = await res.json();
-      if (data.ok) setPendingCount(data.items?.length ?? 0);
+      if (data.ok) setPendingCount(data.count ?? 0);
     } catch {
       // ignore
     }
   }, []);
 
+  // Refresh the badge every 5 min while the tab is visible, and on return to it.
   useEffect(() => {
     fetchPendingCount();
-    const t = window.setInterval(fetchPendingCount, 60_000);
-    return () => window.clearInterval(t);
+    const t = window.setInterval(() => {
+      if (document.visibilityState === 'visible') fetchPendingCount();
+    }, 5 * 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchPendingCount();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [fetchPendingCount]);
 
   async function doLogout() {
@@ -296,13 +306,13 @@ export default function App() {
           showToast={showToast}
           onClose={() => setModalOpen(false)}
           initial={modalInitial}
-          onSaved={async () => {
+          onSaved={async (recordId) => {
             if (pendingSourceId) {
               try {
                 await fetch(`/api/recent-requests/${pendingSourceId}/mark-processed`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ processedRecordId: null }),
+                  body: JSON.stringify({ processedRecordId: recordId }),
                 });
               } catch {
                 // ignore — record was saved successfully; the source will just remain pending

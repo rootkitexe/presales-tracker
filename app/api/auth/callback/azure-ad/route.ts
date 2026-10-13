@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { exchangeCodeForTokens, saveAccount } from '@/lib/ms-oauth';
+import { isAuthenticated } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 const STATE_COOKIE = 'ms_oauth_state';
 
 export async function GET(req: Request) {
+  if (!(await isAuthenticated())) {
+    return NextResponse.redirect(new URL('/login', req.url));
+  }
   const url = new URL(req.url);
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');

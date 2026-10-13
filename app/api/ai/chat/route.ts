@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isAuthenticated } from '@/lib/auth';
 import { searchTracker, searchHubspot } from '@/lib/ai-tools';
 
 export const dynamic = 'force-dynamic';
@@ -93,6 +94,9 @@ async function executeTool(name: string, argsJson: string): Promise<string> {
 }
 
 export async function POST(req: Request) {
+  if (!(await isAuthenticated())) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) {
     return NextResponse.json(
@@ -113,7 +117,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: 'invalid JSON' }, { status: 400 });
   }
 
-  const userMessages = body.messages ?? [];
+  // Only plain user/assistant turns come from the browser — never system/tool.
+  const userMessages: ChatMessage[] = (Array.isArray(body.messages) ? body.messages : [])
+    .filter((m) => m?.role === 'user' || m?.role === 'assistant')
+    .map((m) => ({ role: m.role, content: String(m.content ?? '') }));
   const working: ChatMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
     ...userMessages,

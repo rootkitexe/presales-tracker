@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { isAuthenticated } from '@/lib/auth';
+import { getSupabase } from '@/lib/supabase';
 import { getValidAccessToken, getAccount } from '@/lib/ms-oauth';
 import { AM_EMAILS_LOWER } from '@/lib/am-list';
 import { looksLikeRequest } from '@/lib/mail-filter';
 
 export const dynamic = 'force-dynamic';
 
-const supabase = () =>
-  createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+const supabase = getSupabase;
 
 interface GraphMessage {
   id: string;
@@ -147,9 +147,15 @@ async function runPoll() {
 }
 
 export async function POST() {
-  const result = await runPoll();
-  const { status, ...body } = result;
-  return NextResponse.json(body, { status });
+  if (!(await isAuthenticated())) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+  try {
+    const { status, ...body } = await runPoll();
+    return NextResponse.json(body, { status });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 500 });
+  }
 }
 
 export const GET = POST;

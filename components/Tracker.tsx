@@ -4,8 +4,8 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 
 const PAGE_SIZE = 25;
 import type { PresalesRecord } from '@/lib/types';
-import { deleteRecord, updateRecord, toInput } from '@/lib/api';
-import { readFilesAsJd, viewJdFile } from '@/lib/files';
+import { addJdFiles, deleteRecord, fetchJdFile, removeJdFile } from '@/lib/api';
+import { downloadJdFile, openJdFile, readFilesAsJd } from '@/lib/files';
 import { statusBadgeClass, taraBadgeClass, fmtDate, fileIcon, fileSize } from '@/lib/format';
 import { getInitials, avatarColor } from '@/lib/avatar';
 import type { ConfirmOptions } from './ConfirmDialog';
@@ -162,7 +162,7 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
     setJdBusy(true);
     try {
       const files = await readFilesAsJd(Array.from(list));
-      await updateRecord(rec.id, toInput({ ...rec, jd_files: [...rec.jd_files, ...files] }));
+      await addJdFiles(rec.id, files);
       await reload();
       setExpandedJd(rec.id);
       showToast(`✓ ${files.length} JD file(s) added`, 'ok');
@@ -175,10 +175,7 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
   async function removeJd(rec: PresalesRecord, idx: number) {
     setJdBusy(true);
     try {
-      await updateRecord(
-        rec.id,
-        toInput({ ...rec, jd_files: rec.jd_files.filter((_, i) => i !== idx) }),
-      );
+      await removeJdFile(rec.id, idx, rec.jd_files[idx].name);
       await reload();
     } catch (e) {
       showToast((e as Error).message, 'err');
@@ -471,18 +468,25 @@ export default function Tracker({ records, reload, showToast, confirm, onEdit }:
                               <button
                                 className="btn btn-p"
                                 style={{ padding: '2px 8px', fontSize: 11 }}
-                                onClick={() => viewJdFile(f)}
+                                onClick={() =>
+                                  openJdFile(f, () => fetchJdFile(r.id, fi)).catch((e) =>
+                                    showToast((e as Error).message, 'err'),
+                                  )
+                                }
                               >
                                 👁
                               </button>
-                              <a
-                                href={f.dataUrl}
-                                download={f.name}
+                              <button
                                 className="btn"
                                 style={{ padding: '2px 8px', fontSize: 11 }}
+                                onClick={() =>
+                                  downloadJdFile(f, () => fetchJdFile(r.id, fi)).catch((e) =>
+                                    showToast((e as Error).message, 'err'),
+                                  )
+                                }
                               >
                                 ↓
-                              </a>
+                              </button>
                               <button
                                 className="btn btn-d"
                                 style={{ padding: '2px 8px', fontSize: 11 }}

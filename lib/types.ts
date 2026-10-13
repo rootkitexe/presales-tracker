@@ -12,7 +12,11 @@ export interface JdFile {
   // TODO(storage): currently a base64 data URL stored inline in the DB row.
   // When the storage provider is chosen, this becomes a URL into object
   // storage and uploads move out of the records table. See README.
-  dataUrl: string;
+  //
+  // List endpoints omit it to save egress — files that came from the server
+  // have no dataUrl until fetched individually (see fetchJdFile in lib/api.ts).
+  // Files the user just picked (not yet saved) always carry it.
+  dataUrl?: string;
 }
 
 /** A record as stored in / returned from the database. */
@@ -33,3 +37,6 @@ export interface PresalesRecord {
 
 /** Payload shape for creating/updating a record (no server-managed fields). */
 export type RecordInput = Omit<PresalesRecord, 'id' | 'created_at' | 'updated_at'>;
+
+/** Editable fields for an update — JD files change via their own endpoints. */
+export type RecordFields = Omit<RecordInput, 'jd_files'>;

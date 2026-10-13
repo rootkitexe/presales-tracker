@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 
 const PAGE_SIZE = 25;
 import type { PresalesRecord } from '@/lib/types';
-import { deleteRecord } from '@/lib/api';
+import { deleteRecord, fetchJdFile } from '@/lib/api';
 import { getInitials, avatarColor } from '@/lib/avatar';
 import { statusBadgeClass, taraBadgeClass, fmtDate, fileIcon, fileSize } from '@/lib/format';
-import { viewJdFile } from '@/lib/files';
+import { openJdFile } from '@/lib/files';
 import type { ConfirmOptions } from './ConfirmDialog';
 
 interface Props {
@@ -78,11 +78,13 @@ function DetailPanel({
   onClose,
   onEdit,
   onDelete,
+  onError,
 }: {
   record: PresalesRecord;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onError: (msg: string) => void;
 }) {
   const [tab, setTab] = useState<'assessments' | 'files' | 'activity'>('assessments');
   const personColor = avatarColor(record.person || '?');
@@ -177,7 +179,14 @@ function DetailPanel({
             <ul className="v2-file-list">
               {record.jd_files.map((f, i) => (
                 <li className="v2-file-item" key={i}>
-                  <button className="v2-file-link" onClick={() => viewJdFile(f)}>
+                  <button
+                    className="v2-file-link"
+                    onClick={() =>
+                      openJdFile(f, () => fetchJdFile(record.id, i)).catch((e) =>
+                        onError((e as Error).message),
+                      )
+                    }
+                  >
                     <span className="v2-file-icon">{fileIcon(f.name, f.type)}</span>
                     <span className="v2-file-name">{f.name}</span>
                     <span className="v2-file-size">{fileSize(f.size)}</span>
@@ -458,6 +467,7 @@ export default function TrackerV2({ records, reload, showToast, confirm, onEdit 
             onClose={() => setSelectedId(null)}
             onEdit={() => onEdit(selected)}
             onDelete={handleDelete}
+            onError={(msg) => showToast(msg, 'err')}
           />
         </aside>
       )}

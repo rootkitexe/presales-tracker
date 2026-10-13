@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { JdFile, RecordInput } from '@/lib/types';
 import { personFromEmail } from '@/lib/am-list';
 import { parseCustomerFromSubject } from '@/lib/subject-parser';
@@ -20,7 +20,8 @@ interface RecentRequest {
     name: string;
     contentType?: string;
     size?: number;
-    dataUrl?: string;
+    dataUrl?: string; // only present when fetched via /attachments
+    hasData?: boolean; // set by the list view in place of dataUrl
   }>;
   status: string;
 }
@@ -48,7 +49,11 @@ function relTime(iso: string): string {
   return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-/** Turn Graph-format attachments into JdFile shape. Filters out inline images. */
+/**
+ * Turn Graph-format attachments into JdFile shape. Filters out inline images.
+ * Works on both the list shape (hasData, no bytes) and the full shape (dataUrl),
+ * and keeps the same order for both, so index i refers to the same file.
+ */
 function toJdFiles(atts: RecentRequest['attachments']): JdFile[] {
   return atts
     .filter((a) => {
@@ -57,13 +62,13 @@ function toJdFiles(atts: RecentRequest['attachments']): JdFile[] {
       // Skip inline images that are usually signature logos etc.
       if (type.startsWith('image/') && (a.size ?? 0) < 200_000) return false;
       if (/^image\d{3,}/.test(name)) return false;
-      return !!a.dataUrl;
+      return !!(a.dataUrl || a.hasData);
     })
     .map((a) => ({
       name: a.name,
       size: a.size ?? 0,
       type: a.contentType ?? '',
-      dataUrl: a.dataUrl!,
+      ...(a.dataUrl ? { dataUrl: a.dataUrl } : {}),
     }));
 }
 
@@ -71,6 +76,19 @@ export default function RecentRequests({ showToast, onAddToTracker, refreshTick 
   const [items, setItems] = useState<RecentRequest[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [readerId, setReaderId] = useState<string | null>(null);
+  const jdCache = useRef(new Map<string, JdFile[]>());
+
+  /** Attachments with bytes for one email — fetched once, on first use. */
+  const loadJds = useCallback(async (id: string): Promise<JdFile[]> => {
+    const hit = jdCache.current.get(id);
+    if (hit) return hit;
+    const res = await fetch(`/api/recent-requests/${id}/attachments`);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error ?? 'Failed to load attachments');
+    const jds = toJdFiles(data.attachments ?? []);
+    jdCache.current.set(id, jds);
+    return jds;
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -102,7 +120,19 @@ export default function RecentRequests({ showToast, onAddToTracker, refreshTick 
     }
   }
 
-  function handleAdd(req: RecentRequest) {
+  async function handleAdd(req: RecentRequest) {
+    let jd_files: JdFile[] = [];
+    if (toJdFiles(req.attachments).length) {
+      setBusyId(req.id);
+      try {
+        jd_files = await loadJds(req.id);
+      } catch (e) {
+        showToast((e as Error).message, 'err');
+        return;
+      } finally {
+        setBusyId(null);
+      }
+    }
     const person = personFromEmail(req.from_email) ?? '';
     const customer = parseCustomerFromSubject(req.subject) ?? '';
     const date = req.received_at.slice(0, 10);
@@ -112,7 +142,7 @@ export default function RecentRequests({ showToast, onAddToTracker, refreshTick 
       status: 'Ongoing',
       date,
       notes: req.body_preview?.trim() ?? '',
-      jd_files: toJdFiles(req.attachments),
+      jd_files,
     };
     onAddToTracker(initial, req.id);
   }
@@ -148,6 +178,7 @@ export default function RecentRequests({ showToast, onAddToTracker, refreshTick 
           fromEmail={readerItem.from_email}
           receivedAt={readerItem.received_at}
           attachments={toJdFiles(readerItem.attachments)}
+          loadAttachments={() => loadJds(readerItem.id)}
           showToast={showToast}
           onClose={() => setReaderId(null)}
           onAdd={() => handleAdd(readerItem)}

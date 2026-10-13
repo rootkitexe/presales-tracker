@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import type { Assessment, JdFile, PresalesRecord, RecordInput } from '@/lib/types';
 import { STATUS_OPTIONS, TARA_OPTIONS } from '@/lib/constants';
-import { createRecords, updateRecord } from '@/lib/api';
+import { addJdFiles, createRecords, removeJdFile, updateRecord } from '@/lib/api';
 import { readFilesAsJd } from '@/lib/files';
 import { fileIcon, fileSize } from '@/lib/format';
 import AssessmentsEditor from './AssessmentsEditor';
@@ -16,8 +16,8 @@ interface Props {
   onClose: () => void;
   /** Pre-fill values for a new request (only used when record is null). */
   initial?: Partial<RecordInput>;
-  /** Fired after a successful save (create or update). Passes the input just saved. */
-  onSaved?: (input: RecordInput) => void;
+  /** Fired after a successful save (create or update) with the record's id. */
+  onSaved?: (id: string) => void;
 }
 
 function ymd(d: Date) {
@@ -88,11 +88,26 @@ export default function RecordModal({
     };
     setSaving(true);
     try {
-      if (record) await updateRecord(record.id, payload);
-      else await createRecords([payload]);
+      let id: string;
+      if (record) {
+        // Fields and files are saved separately so existing files are never
+        // re-sent. Files still in `jd` keep their original object identity.
+        id = record.id;
+        const { jd_files: _files, ...fields } = payload;
+        void _files;
+        await updateRecord(id, fields);
+        const original = record.jd_files;
+        for (let i = original.length - 1; i >= 0; i--) {
+          if (!jd.includes(original[i])) await removeJdFile(id, i, original[i].name);
+        }
+        await addJdFiles(id, jd.filter((f) => !original.includes(f)));
+      } else {
+        const [created] = await createRecords([payload]);
+        id = created?.id ?? '';
+      }
       await reload();
       showToast(record ? '✓ Record updated' : '✓ Record added', 'ok');
-      onSaved?.(payload);
+      if (id) onSaved?.(id);
       onClose();
     } catch (e) {
       showToast((e as Error).message, 'err');
